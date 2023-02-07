@@ -1,0 +1,22 @@
+{
+  "name": "youtube-campaign",
+  "version": "1.0.0",
+  "description": "Feature List:\r 1. Get Google Playstore data base on user input\r 2. Save those data (images, description, app name, comments) and store them in csv file\r 3. Create password encoded archives\r 4. Upload archives to Google Drive via API\r 5. Generate bit.ly links via API and store them to the existing csv file\r 6. Make a video using FFMPEG from saved images\r 7. Uplaod video to Youtube from saved information",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/jsuci/youtube-campaign.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jsuci/youtube-campaign/issues"
+  },
+  "homepage": "https://github.com/jsuci/youtube-campaign#readme",
+  "dependencies": {
+    "puppeteer": "^19.6.3"
+  }
+}
