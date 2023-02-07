@@ -11,9 +11,13 @@ rl.question('Enter appID (ex. com.originatorkids.EndlessAlphabet): ', async (sea
 
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
-  await page.goto(url);
 
+  await page.goto(url);
   console.log(`Opened page: ${url}`);
+
+  const spanElement = await page.$('h1 > span');
+  const spanTitle = await page.evaluate(element => element.textContent, spanElement);
+  console.log(`Extracted title: ${spanTitle}`);
 
   await browser.close();
   rl.close();
