@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/jsuci/youtube-campaign#readme",
   "dependencies": {
+    "gm": "^1.25.0",
     "puppeteer": "^19.6.3"
   }
 }
