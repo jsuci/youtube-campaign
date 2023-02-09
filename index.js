@@ -30,7 +30,7 @@ rl.question('Enter appID (ex. com.originatorkids.EndlessAlphabet): ', async (sea
   const element = await page.$('.l8YSdd > img');
   const attributeValue = await page.evaluate((el, attr) => el.getAttribute(attr), element, 'src');
   const thumbnailURL = attributeValue.replace('s48', 's512')
-  const directory = appTitle;
+  const directory = 'apps/' + appTitle;
   const webpPath = path.join(directory, 'app-thumbnail.webp');
 
   if (!fs.existsSync(directory)) {
