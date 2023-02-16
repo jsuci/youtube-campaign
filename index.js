@@ -23,7 +23,7 @@ async function getThumbnail(page) {
   const thumbnailElement = await page.$('.l8YSdd > img');
   const attributeValue = await page.evaluate((el, attr) => el.getAttribute(attr), thumbnailElement, 'src');
   const thumbnailURL = attributeValue.replace('s48', 's512');
-  return [thumbnailURL];
+  return thumbnailURL;
 }
 
 
@@ -65,22 +65,18 @@ async function downloadFile(url, path) {
 }
 
 
-async function downloadAppImages(imageList, appTitle, isThumbnail) {
+async function downloadAppImages(imageList, appTitle) {
   const directory = path.join('apps', appTitle);
-  let i = 1;
+  let i = 0;
 
   if (!fs.existsSync(directory)) {
     fs.mkdirSync(directory, {recursive: true});
   }
 
   for (const imageUrl of imageList) {
-    if (isThumbnail) {
-      fileName = "app-thumbnail.webp"
-    } else {
-      fileName = `${i++}.webp`
-    }
-    const imagePath = path.join(directory, fileName);
+    const imagePath = path.join(directory, `${i++}.webp`);
     await downloadFile(imageUrl, imagePath);
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 
@@ -130,6 +126,8 @@ async function overlayImages(appTitle) {
       await sharp(outputImage).toFile(outputPath);
       console.log(`Saved file: ${outputPath}`);
     }
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 
@@ -140,6 +138,7 @@ async function overlayImages(appTitle) {
   const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
+  let imageList = []
 
   await page.goto(url);
   console.log(`Opened page: ${url}\n`);
@@ -149,11 +148,12 @@ async function overlayImages(appTitle) {
   console.log(`Extracted title: ${appTitle}`);
 
   const thumbURL = await getThumbnail(page)
-  data['thumbURL'] = thumbURL
-  console.log(`Extracted thumbnail: ${thumbURL.length}`);
+  imageList.push(thumbURL)
+  console.log(`Extracted thumbnail: ${imageList.length}`);
 
   const appImages = await getAppImages(page)
-  data['appImages'] = appImages
+  imageList = imageList.concat(appImages)
+  data['images'] = imageList
   console.log(`Extracted appImages: ${appImages.length}\n`);
 
   const description = await getDescription(page)
@@ -162,9 +162,14 @@ async function overlayImages(appTitle) {
 
   console.log(data, '\n')
 
-  await downloadAppImages(thumbURL, appTitle, true)
-  await downloadAppImages(appImages, appTitle, false)
-  await overlayImages(appTitle)
+  downloadAppImages(imageList, appTitle)
+  .then(() => overlayImages(appTitle))
+  .then(() => {
+    console.log('All done!');
+  })
+  .catch((err) => {
+    console.error('Error:', err);
+  });
 
 
 
