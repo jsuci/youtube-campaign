@@ -37,7 +37,7 @@ async function getAppImages(page) {
 
 async function downloadFile(url, path) {
   return new Promise((resolve, reject) => {
-    https.get(url, (response) => {
+    https.get(url, response => {
       let downloadedImageBuffer = [];
       response.on('data', (chunk) => {
         downloadedImageBuffer.push(chunk);
@@ -66,7 +66,7 @@ async function downloadFile(url, path) {
 
 
 async function downloadAppImages(imageList, appTitle, isThumbnail) {
-  const directory = 'apps/' + appTitle;
+  const directory = path.join('apps', appTitle);
   let i = 1;
 
   if (!fs.existsSync(directory)) {
@@ -83,6 +83,56 @@ async function downloadAppImages(imageList, appTitle, isThumbnail) {
     await downloadFile(imageUrl, imagePath);
   }
 }
+
+
+
+async function overlayImages(appTitle) {
+  // Read files from input folder
+  const inputFolder = path.join('apps', appTitle);
+  const inputFiles = fs.readdirSync(inputFolder);
+  console.log(`\nFound ${inputFiles.length} files in ${inputFolder}`);
+
+  // Read files from overlay folder
+  const overlayFolder = 'overlays/'
+  const overlayFiles = fs.readdirSync(overlayFolder);
+  console.log(`Found ${overlayFiles.length} files in ${overlayFolder}`);
+
+  // Create output folder if it doesn't exist
+  const outputFolder = path.join(inputFolder, 'output');
+  if (!fs.existsSync(outputFolder)) {
+    fs.mkdirSync(outputFolder);
+    console.log(`Created directory: ${outputFolder}`);
+  }
+
+  for (let i = 0; i < inputFiles.length; i++) {
+    const inputFile = inputFiles[i];
+    const inputPath = path.join(inputFolder, inputFile);
+
+    // Check if the file is an image
+    if (inputFile.match(/\.(jpg|jpeg|png|webp)$/i)) {
+
+      // Choose a random overlay file
+      const overlayFile = overlayFiles[Math.floor(Math.random() * overlayFiles.length)];
+      const overlayPath = path.join(overlayFolder, overlayFile);
+
+      // Load both images using Sharp
+      const inputImage = sharp(inputPath);
+      const overlayImage = sharp(overlayPath);
+
+      // Overlay the images
+      const randPos = ['northwest', 'southeast']
+      const outputImage = await inputImage
+        .composite([{ input: await overlayImage.toBuffer(), gravity: randPos[Math.floor(Math.random() * randPos.length)] }])
+        .toBuffer();
+
+      // Save the output image to the output folder
+      const outputPath = path.join(outputFolder, inputFile);
+      await sharp(outputImage).toFile(outputPath);
+      console.log(`Saved file: ${outputPath}`);
+    }
+  }
+}
+
 
 (async () => {
   const data = {}
@@ -114,6 +164,7 @@ async function downloadAppImages(imageList, appTitle, isThumbnail) {
 
   await downloadAppImages(thumbURL, appTitle, true)
   await downloadAppImages(appImages, appTitle, false)
+  await overlayImages(appTitle)
 
 
 
