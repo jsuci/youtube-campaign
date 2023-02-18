@@ -76,7 +76,7 @@ async function downloadAppImages(imageList, appTitle) {
   for (const imageUrl of imageList) {
     const imagePath = path.join(directory, `${i++}.webp`);
     await downloadFile(imageUrl, imagePath);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
 
@@ -89,7 +89,7 @@ async function overlayImages(appTitle) {
   console.log(`\nFound ${inputFiles.length} files in ${inputFolder}`);
 
   // Read files from overlay folder
-  const overlayFolder = 'overlays/'
+  const overlayFolder = 'overlays/PNG'
   const overlayFiles = fs.readdirSync(overlayFolder);
   console.log(`Found ${overlayFiles.length} files in ${overlayFolder}`);
 
@@ -116,9 +116,10 @@ async function overlayImages(appTitle) {
       const overlayImage = sharp(overlayPath);
 
       // Overlay the images
-      const randPos = ['northwest', 'southeast']
+      const topRand = Math.floor(Math.random() * 780)
+      const leftRand = Math.floor(Math.random() * 1000)
       const outputImage = await inputImage
-        .composite([{ input: await overlayImage.toBuffer(), gravity: randPos[Math.floor(Math.random() * randPos.length)] }])
+        .composite([{ input: await overlayImage.toBuffer(), top: 0, left: 0}])
         .toBuffer();
 
       // Save the output image to the output folder
@@ -126,8 +127,8 @@ async function overlayImages(appTitle) {
       await sharp(outputImage).toFile(outputPath);
       console.log(`Saved file: ${outputPath}`);
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
 
