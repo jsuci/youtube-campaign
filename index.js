@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const spawn = require('child_process').spawn
 
 
 async function getTitle(page) {
@@ -47,7 +48,7 @@ async function downloadFile(url, path) {
         sharp(downloadedImageBuffer)
           .resize(1920, 1080, {
             kernel: sharp.kernel.lanczos3,
-            fit: 'outside',
+            fit: 'contain',
           })
           .webp()
           .toFile(path, (err, info) => {
@@ -119,7 +120,7 @@ async function overlayImages(appTitle) {
       const topRand = Math.floor(Math.random() * 780)
       const leftRand = Math.floor(Math.random() * 1000)
       const outputImage = await inputImage
-        .composite([{ input: await overlayImage.toBuffer(), top: 0, left: 0}])
+        .composite([{ input: await overlayImage.toBuffer()}])
         .toBuffer();
 
       // Save the output image to the output folder
@@ -130,6 +131,111 @@ async function overlayImages(appTitle) {
 
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
+}
+
+
+async function createVideoFromImages(appTitle) {
+  const imageDirectory = path.join('apps', appTitle, 'output');
+  // const musicPath = path.join('apps', appTitle, 'music');
+
+  const outputVideoPath = path.join('apps', appTitle, 'video');
+  if (!fs.existsSync(outputVideoPath)) {
+    fs.mkdirSync(outputVideoPath);
+    console.log(`Created directory: ${outputVideoPath}`);
+  }
+
+  const imageFiles = fs.readdirSync(imageDirectory).filter(file => file.endsWith('.webp'));
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    let index = i + 1
+    const file = imageFiles[i];
+    const inputFilePath = path.join(imageDirectory, file);
+    const outputFilePath = path.join(outputVideoPath, `vid${index.toString().padStart(2, '0')}.mp4`);
+    const randDuration = Math.floor(Math.random() * 3) + 3;
+
+    // Create FFmpeg command to create the video from images
+    const ffmpeg = spawn('ffmpeg', [
+      '-y', // overwrite existing file
+      '-loop', '1', // loop the input image
+      '-i', `${inputFilePath}`, // input file
+      '-c:v', 'libx264', // video codec
+      '-t', `${randDuration}`, // video duration
+      '-pix_fmt', 'yuv420p', // pixel format
+      '-crf', '18', // Constant Rate Factor (lower is higher quality, 18-28 is a good range)
+      '-preset', 'veryslow', // slower encoding for better compression
+      '-s', '1920x1080', // resize video
+      outputFilePath // output file path
+    ]);
+
+    // Print FFmpeg output to console
+    ffmpeg.stdout.on('data', data => console.log(data.toString()));
+    ffmpeg.stderr.on('data', data => console.error(data.toString()));
+
+    // Wait for FFmpeg to finish
+    await new Promise((resolve, reject) => {
+      ffmpeg.on('exit', (code) => {
+        if (code === 0) {
+          console.log(`Video created: ${outputFilePath}`);
+          resolve();
+        } else {
+          reject(new Error(`FFmpeg error: exit code ${code}`));
+        }
+      });
+    });
+
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
+
+async function concatVideos(appTitle) {
+  const videoPath = path.join('apps', appTitle, 'video');
+  const outputFilePath = path.join('apps', appTitle, 'output.mp4');
+  
+  // Create videos.txt
+  fs.promises.readdir(videoPath)
+    .then(files => {
+      const outputVideoTxt = path.join('apps', appTitle, 'videos.txt')
+      const videoPaths = files
+        .filter(file => file.endsWith('.mp4'))
+        .map(file => `file '${path.join('video', file)}'`)
+        .join('\n');
+      
+      return fs.promises.writeFile(outputVideoTxt, videoPaths);
+
+    })
+    .then(() => console.log('videos.txt file created successfully!'))
+    .catch(error => console.error(`Error creating videos.txt: ${error}`));
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Create FFmpeg command to concatenate input files
+  const txtFilePath = path.join('apps', appTitle, 'videos.txt');
+  const ffmpeg = spawn('ffmpeg', [
+    '-y', // overwrite output file if it exists
+    '-f', 'concat', // format
+    '-safe', '0', // allow any file name
+    '-i', `${txtFilePath}`, // input files
+    '-c', 'copy', // copy codec
+    outputFilePath // output file path
+  ]);
+
+  // Print FFmpeg output to console
+  ffmpeg.stdout.on('data', data => console.log(data.toString()));
+  ffmpeg.stderr.on('data', data => console.error(data.toString()));
+
+  // Wait for FFmpeg to finish
+  await new Promise((resolve, reject) => {
+    ffmpeg.on('exit', (code) => {
+      if (code === 0) {
+        console.log(`Video created: ${outputFilePath}`);
+        resolve();
+      } else {
+        reject(new Error(`FFmpeg error: exit code ${code}`));
+      }
+    });
+  });
 }
 
 
@@ -165,14 +271,14 @@ async function overlayImages(appTitle) {
 
   downloadAppImages(imageList, appTitle)
   .then(() => overlayImages(appTitle))
+  .then(() => createVideoFromImages(appTitle))
+  .then(() => concatVideos(appTitle))
   .then(() => {
     console.log('All done!');
   })
   .catch((err) => {
     console.error('Error:', err);
   });
-
-
 
   await browser.close();
 })();
