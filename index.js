@@ -7,7 +7,7 @@ const spawn = require('child_process').spawn
 
 
 async function getTitle(page) {
-  const invalidChars = /[\\/:*?"<>|]/g;
+  const invalidChars = /[\\/:*?"'<>|]/g;
   const spanElement = await page.$('h1 > span');
   const spanTitle = await page.evaluate(element => element.textContent, spanElement);
   const appTitle = spanTitle.trim().replace(invalidChars, "");
@@ -33,6 +33,22 @@ async function getAppImages(page) {
     const images = Array.from(document.querySelectorAll('div[role="listitem"] img'));
     return images.map(img => img.getAttribute('src').replace('w526-h296', 'w2560-h1440'));
   });
+}
+
+
+async function getComments(page) {
+  const reviewBtn = await page.waitForSelector('text/See all reviews');
+  await reviewBtn.click();
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const elements = await page.$$eval('.RHo1pe', elements => {
+    return elements.filter(element => {
+      const ariaLabel = element.querySelector('.Jx4nYe div').getAttribute('aria-label');
+      return ariaLabel === 'Rated 5 stars out of five stars';
+    }).map(element => element.querySelector('.h3YV2d').textContent.trim());
+  });
+  
+  return elements
 }
 
 
@@ -250,7 +266,11 @@ async function concatVideos(appTitle) {
   const data = {}
   const searchTerm = process.argv[2];
   const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    // headless: true,
+    slowMo: 250,
+    // devtools: true
+  });
   const page = await browser.newPage();
   let imageList = []
 
@@ -268,25 +288,29 @@ async function concatVideos(appTitle) {
   const appImages = await getAppImages(page)
   imageList = imageList.concat(appImages)
   data['images'] = imageList
-  console.log(`Extracted appImages: ${appImages.length}\n`);
+  console.log(`Extracted appImages: ${appImages.length}`);
 
   const description = await getDescription(page)
   data['appDesc'] = description
-  console.log(`Extracted description: ${description.length}\n`);
+  console.log(`Extracted description: ${description.length}`);
+
+  const comments = await getComments(page)
+  data['comments'] = comments
+  console.log(`Extracted comments: ${comments.length}`);
 
   console.log(data, '\n')
 
-
-  downloadAppImages(imageList, appTitle)
-  .then(() => overlayImages(appTitle))
-  .then(() => createVideoFromImages(appTitle))
-  .then(() => concatVideos(appTitle))
-  .then(() => {
-    console.log('All done!');
-  })
-  .catch((err) => {
-    console.error('Error:', err);
-  });
+  // await downloadAppImages(imageList, appTitle)
+  // .then(() => overlayImages(appTitle))
+  // .then(() => createVideoFromImages(appTitle))
+  // .then(() => concatVideos(appTitle))
+  // .then(() => {
+  //   console.log('All done!');
+  // })
+  // .catch((err) => {
+  //   console.error('Error:', err);
+  // });
+  
 
   await browser.close();
 })();
