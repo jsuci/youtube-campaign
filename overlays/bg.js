@@ -7,7 +7,7 @@ function getRandomValue() {
 var inputFolder = Folder.selectDialog("Select the folder containing the PNG files");
 
 // Create the output folder if it doesn't already exist
-var outputFolder = new Folder(inputFolder + "/PNG");
+var outputFolder = new Folder(inputFolder + "/png");
 if (!outputFolder.exists) {
   outputFolder.create();
 }

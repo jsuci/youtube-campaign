@@ -136,7 +136,6 @@ async function overlayImages(appTitle) {
 
 async function createVideoFromImages(appTitle) {
   const imageDirectory = path.join('apps', appTitle, 'output');
-  // const musicPath = path.join('apps', appTitle, 'music');
 
   const outputVideoPath = path.join('apps', appTitle, 'video');
   if (!fs.existsSync(outputVideoPath)) {
@@ -163,7 +162,7 @@ async function createVideoFromImages(appTitle) {
       '-pix_fmt', 'yuv420p', // pixel format
       '-crf', '18', // Constant Rate Factor (lower is higher quality, 18-28 is a good range)
       '-preset', 'veryslow', // slower encoding for better compression
-      '-s', '1920x1080', // resize video
+      '-s', '1920x1080', // resize videos
       outputFilePath // output file path
     ]);
 
@@ -192,6 +191,8 @@ async function createVideoFromImages(appTitle) {
 async function concatVideos(appTitle) {
   const videoPath = path.join('apps', appTitle, 'video');
   const outputFilePath = path.join('apps', appTitle, 'output.mp4');
+  const musicPath = path.join('music', 'music01.mp3');
+  const finalVideoPath = path.join('apps', appTitle, 'final.mp4');
   
   // Create videos.txt
   fs.promises.readdir(videoPath)
@@ -217,7 +218,12 @@ async function concatVideos(appTitle) {
     '-f', 'concat', // format
     '-safe', '0', // allow any file name
     '-i', `${txtFilePath}`, // input files
-    '-c', 'copy', // copy codec
+    '-stream_loop', '-1', //loop music
+    '-i', `${musicPath}`, // music01.mp3
+    '-shortest', // end loop music as video ends
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-c:v', 'copy', // copy codec
     outputFilePath // output file path
   ]);
 
@@ -236,6 +242,7 @@ async function concatVideos(appTitle) {
       }
     });
   });
+
 }
 
 
@@ -268,6 +275,7 @@ async function concatVideos(appTitle) {
   console.log(`Extracted description: ${description.length}\n`);
 
   console.log(data, '\n')
+
 
   downloadAppImages(imageList, appTitle)
   .then(() => overlayImages(appTitle))
