@@ -4,6 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const spawn = require('child_process').spawn
+const { Parser } = require('json2csv');
+const knex = require('knex')({
+  client: 'pg',
+  connection: {
+    host: 'localhost',
+    user: 'postgres',
+    password: 'postgres',
+    database: 'ytcampaign',
+  },
+});
 
 
 async function getTitle(page) {
@@ -45,10 +55,60 @@ async function getComments(page) {
     return elements.filter(element => {
       const ariaLabel = element.querySelector('.Jx4nYe div').getAttribute('aria-label');
       return ariaLabel === 'Rated 5 stars out of five stars';
-    }).map(element => element.querySelector('.h3YV2d').textContent.trim());
+    }).map(element => element.querySelector('.h3YV2d').textContent.trim() + '\n');
   });
   
   return elements
+}
+
+
+async function insertData(data) {
+  
+  // Check if the appTitle already exists in the database
+  knex('apps')
+    .select('apptitle')
+    .where('apptitle', data['apptitle'])
+    .then(rows => {
+      if (rows.length === 0) {
+        // If the appTitle doesn't exist, insert a new row
+        return knex('apps')
+        .insert(data)
+        .then(() => console.log('Data inserted into database'))
+        .catch((error) => console.error(error));
+      }
+    })
+    .finally(() => {
+      knex.destroy();
+    });
+  
+}
+
+async function viewData() {
+  knex('apps')
+  .select()
+  .then(rows => {
+    console.log(`Total app entries: ${rows.length}`);
+  })
+  .finally(() => {
+    knex.destroy();
+  });
+}
+
+
+async function exportData() {
+  knex.select('*')
+  .from('apps')
+  .then(rows => {
+    const json2csvParser = new Parser({ header: true });
+    const csvData = json2csvParser.parse(rows);
+
+    fs.writeFile('data.csv', csvData, (err) => {
+      if (err) throw err;
+      console.log('Data exported to CSV file successfully');
+    });
+  })
+  .catch(err => console.log(err))
+  .finally(() => knex.destroy());
 }
 
 
@@ -152,8 +212,8 @@ async function overlayImages(appTitle) {
 
 async function createVideoFromImages(appTitle) {
   const imageDirectory = path.join('apps', appTitle, 'output');
-
   const outputVideoPath = path.join('apps', appTitle, 'video');
+
   if (!fs.existsSync(outputVideoPath)) {
     fs.mkdirSync(outputVideoPath);
     console.log(`Created directory: ${outputVideoPath}`);
@@ -198,9 +258,23 @@ async function createVideoFromImages(appTitle) {
       });
     });
 
-    
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
+
+  await new Promise((resolve, reject) => {
+    fs.readdir(imageDirectory, (err, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        files.forEach(file => {
+          fs.unlinkSync(`${imageDirectory}/${file}`);
+        });
+        console.log(`All files in ${imageDirectory} have been deleted.`);
+        resolve();
+      }
+    });
+  });
+
 }
 
 
@@ -259,6 +333,23 @@ async function concatVideos(appTitle) {
     });
   });
 
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  await new Promise((resolve, reject) => {
+    fs.readdir(videoPath, (err, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        files.forEach(file => {
+          fs.unlinkSync(`${videoPath}/${file}`);
+        });
+        console.log(`All files in ${videoPath} have been deleted.`);
+        resolve();
+      }
+    });
+  });
+
 }
 
 
@@ -278,7 +369,7 @@ async function concatVideos(appTitle) {
   console.log(`Opened page: ${url}\n`);
 
   const appTitle = await getTitle(page)
-  data['appTitle'] = appTitle
+  data['apptitle'] = appTitle
   console.log(`Extracted title: ${appTitle}`);
 
   const thumbURL = await getThumbnail(page)
@@ -291,25 +382,27 @@ async function concatVideos(appTitle) {
   console.log(`Extracted appImages: ${appImages.length}`);
 
   const description = await getDescription(page)
-  data['appDesc'] = description
+  data['appdesc'] = description
   console.log(`Extracted description: ${description.length}`);
 
   const comments = await getComments(page)
   data['comments'] = comments
   console.log(`Extracted comments: ${comments.length}`);
 
-  console.log(data, '\n')
+  // console.log(data, '\n')
 
-  // await downloadAppImages(imageList, appTitle)
-  // .then(() => overlayImages(appTitle))
-  // .then(() => createVideoFromImages(appTitle))
-  // .then(() => concatVideos(appTitle))
-  // .then(() => {
-  //   console.log('All done!');
-  // })
-  // .catch((err) => {
-  //   console.error('Error:', err);
-  // });
+  await downloadAppImages(imageList, appTitle)
+  .then(() => overlayImages(appTitle))
+  .then(() => createVideoFromImages(appTitle))
+  .then(() => concatVideos(appTitle))
+  .then(() => insertData(data))
+  .then(() => exportData())
+  .then(() => {
+    console.log('All done!');
+  })
+  .catch((err) => {
+    console.error('Error:', err);
+  });
   
 
   await browser.close();

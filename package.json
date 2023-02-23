@@ -17,6 +17,9 @@
   },
   "homepage": "https://github.com/jsuci/youtube-campaign#readme",
   "dependencies": {
+    "json2csv": "^6.0.0-alpha.2",
+    "knex": "^2.4.2",
+    "pg": "^8.9.0",
     "puppeteer": "^19.6.3",
     "sharp": "^0.31.3"
   }
