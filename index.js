@@ -100,7 +100,10 @@ async function exportData() {
   .from('apps')
   .then(rows => {
     const json2csvParser = new Parser({ header: true });
-    const csvData = json2csvParser.parse(rows);
+    let csvData = '';
+    if (rows.length > 0) {
+      csvData = json2csvParser.parse(rows);
+    }
 
     fs.writeFile('data.csv', csvData, (err) => {
       if (err) throw err;
@@ -153,7 +156,7 @@ async function downloadAppImages(imageList, appTitle) {
   for (const imageUrl of imageList) {
     const imagePath = path.join(directory, `${i++}.webp`);
     await downloadFile(imageUrl, imagePath);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 
@@ -281,8 +284,13 @@ async function createVideoFromImages(appTitle) {
 async function concatVideos(appTitle) {
   const videoPath = path.join('apps', appTitle, 'video');
   const outputFilePath = path.join('apps', appTitle, 'output.mp4');
-  const musicPath = path.join('music', 'music01.mp3');
-  const finalVideoPath = path.join('apps', appTitle, 'final.mp4');
+  const musicPath = path.join('music');
+
+  // Get all music files
+  const musicFiles = await fs.promises.readdir(musicPath);
+  const randomMusicFile = musicFiles[Math.floor(Math.random() * musicFiles.length)];
+  const chosenMusic = path.join(musicPath, randomMusicFile)
+
   
   // Create videos.txt
   fs.promises.readdir(videoPath)
@@ -309,7 +317,8 @@ async function concatVideos(appTitle) {
     '-safe', '0', // allow any file name
     '-i', `${txtFilePath}`, // input files
     '-stream_loop', '-1', //loop music
-    '-i', `${musicPath}`, // music01.mp3
+    '-i', `${chosenMusic}`, // music01.mp3
+    // '-filter_complex', '[1:a]volume=0.3[a1];[0:a][a1]amerge=inputs=2[a]', // adjust volume of audio to 50%
     '-shortest', // end loop music as video ends
     '-map', '0:v:0',
     '-map', '1:a:0',
@@ -358,15 +367,20 @@ async function concatVideos(appTitle) {
   const searchTerm = process.argv[2];
   const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
   const browser = await puppeteer.launch({
-    // headless: true,
+    headless: true,
     slowMo: 250,
-    // devtools: true
+    devtools: true
   });
   const page = await browser.newPage();
   let imageList = []
 
   await page.goto(url);
   console.log(`Opened page: ${url}\n`);
+
+
+  const apkName = searchTerm.trim()
+  data['apkname'] = apkName
+  console.log(`Extracted apkName: ${apkName}`);
 
   const appTitle = await getTitle(page)
   data['apptitle'] = appTitle
@@ -391,7 +405,7 @@ async function concatVideos(appTitle) {
 
   // console.log(data, '\n')
 
-  await downloadAppImages(imageList, appTitle)
+  downloadAppImages(imageList, appTitle)
   .then(() => overlayImages(appTitle))
   .then(() => createVideoFromImages(appTitle))
   .then(() => concatVideos(appTitle))
