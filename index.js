@@ -5,6 +5,10 @@ const path = require('path');
 const sharp = require('sharp');
 const spawn = require('child_process').spawn
 const { Parser } = require('json2csv');
+const { randomBytes } = require('crypto');
+const archiver = require('archiver');
+archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
+
 const knex = require('knex')({
   client: 'pg',
   connection: {
@@ -15,6 +19,7 @@ const knex = require('knex')({
   },
 });
 
+// getting data
 
 async function getTitle(page) {
   const invalidChars = /[\\/:*?"'<>|]/g;
@@ -61,7 +66,7 @@ async function getComments(page) {
   return elements
 }
 
-
+// store data to postgres
 async function insertData(data) {
   
   // Check if the appTitle already exists in the database
@@ -115,6 +120,8 @@ async function exportData() {
 }
 
 
+// creating files
+
 async function downloadFile(url, path) {
   return new Promise((resolve, reject) => {
     https.get(url, response => {
@@ -151,6 +158,7 @@ async function downloadAppImages(imageList, appTitle) {
 
   if (!fs.existsSync(directory)) {
     fs.mkdirSync(directory, {recursive: true});
+    console.log(`Created directory: ${directory}`);
   }
 
   for (const imageUrl of imageList) {
@@ -362,6 +370,75 @@ async function concatVideos(appTitle) {
 }
 
 
+async function createDummyFile(appTitle, data) {
+  const fileName = `${appTitle} Full Version Unlocked`
+  const fileFolder = path.join('apps', appTitle, 'file', fileName);
+  const sizeInBytes = 1048576
+
+  if (!fs.existsSync(fileFolder)) {
+    fs.mkdirSync(fileFolder, {recursive: true});
+    console.log(`Created directory: ${fileFolder}`);
+  }
+
+  const filePath = path.join(fileFolder, `${data['apkname']}.apk`)
+
+  const buffer = randomBytes(sizeInBytes);
+  await fs.promises.writeFile(filePath, buffer);
+  console.log(`Dummy file created successfully!`);
+
+
+  const textPath = path.join(fileFolder, 'Instructions.txt');
+  const textContent = 'Instructions:\n\nTo extract the contents of this zip file, you will need a password.\nThe password is inside a text file named "Password.txt".\n\nYou can download "Password.txt" from here: https://filestrue.com/1313942';
+  
+  fs.writeFileSync(textPath, textContent);
+  console.log(`Instruction file created successfully!`);
+
+}
+
+
+async function createZipFile(appTitle, data) {
+  const fileName = `${appTitle} Full Version Unlocked`
+  const fileFolder = path.join('apps', appTitle, 'file', fileName)
+  const zipName = fileFolder + '.zip'
+
+  // create a write stream for the output file
+  const output = fs.createWriteStream(zipName);
+
+  // create a new zip file
+  const archive = archiver.create(
+    'zip-encrypted',
+    {zlib: {level: 8},
+    encryptionMethod: 'aes256',
+    password: 'V9R7Abj9!aq#'});
+
+  // pipe the archive to the output file
+  archive.pipe(output);
+
+  // add the folder to the archive
+  archive.directory(fileFolder, false);
+
+  // finalize the archive
+  archive.finalize();
+
+  // listen for the 'close' event on the output file stream
+  output.on('close', function() {
+    console.log(archive.pointer() + ' total bytes');
+    console.log('Archiver has been finalized and the output file descriptor has closed.');
+
+    fs.rmSync(fileFolder, { recursive: true, force: true }, (err) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      console.log('File folder deleted successfully!');
+    });
+
+  })
+  
+
+}
+
+
 (async () => {
   const data = {}
   const searchTerm = process.argv[2];
@@ -404,13 +481,15 @@ async function concatVideos(appTitle) {
   console.log(`Extracted comments: ${comments.length}`);
 
   // console.log(data, '\n')
-
+  
   downloadAppImages(imageList, appTitle)
   .then(() => overlayImages(appTitle))
   .then(() => createVideoFromImages(appTitle))
   .then(() => concatVideos(appTitle))
   .then(() => insertData(data))
   .then(() => exportData())
+  .then(() => createDummyFile(appTitle, data))
+  .then(() => createZipFile(appTitle, data))
   .then(() => {
     console.log('All done!');
   })
