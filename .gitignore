@@ -1,3 +1,5 @@
 node_modules
 apps
 overlays/PNG
+.env
+user_data

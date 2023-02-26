@@ -1,4 +1,13 @@
-const puppeteer = require('puppeteer');
+require('dotenv').config()
+const email = process.env.EMAIL
+const password = process.env.PASSWORD
+
+const {executablePath} = require('puppeteer')
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
+
+
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +28,50 @@ const knex = require('knex')({
   },
 });
 
+
+
 // getting data
+async function checkLogin(page, url) {
+  const profileElement = await page.$('.VfPpkd-Bz112c-LgbsSe > img');
+  const attributeValue = await page.evaluate((el, attr) => el.getAttribute(attr), profileElement, 'src');
+  
+  if (attributeValue.includes('anonymous')) {
+    console.log(`You are not logged in`);
+
+    await page.goto('https://accounts.google.com/Login', { waitUntil: 'networkidle2' });
+    await page.type('input[type="email"]', email);
+    await page.click('#identifierNext');
+    await page.waitForSelector('input[type="password"]', { visible: true });
+    await page.type('input[type="password"]', password);
+    await page.click('#passwordNext');
+    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    await page.waitForSelector('text/Welcome', { visible: true });
+    console.log('Welcome, you are now logged in')
+
+    await page.goto(url);
+    console.log(`Reopened page: ${url}\n`);
+
+  } else {
+    console.log(`You are logged in`);
+  }
+}
+
+
+async function getFileSize(page) {
+  const reviewBtn = await page.$$('text/arrow_forward');
+  await reviewBtn[0].click();
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const dlSize = await page.$$eval('.sMUprd', elements => {
+    return elements.filter(element => {
+      const ariaLabel = element.querySelector('.q078ud').textContent;
+      return ariaLabel === 'Download Size';
+    }).map(element => element.querySelector('.reAt0').textContent.trim() + '\n');
+  });
+
+  return dlSize[0].replace('MB', '').trim()
+}
+
+
 
 async function getTitle(page) {
   const invalidChars = /[\\/:*?"'<>|]/g;
@@ -373,7 +425,7 @@ async function concatVideos(appTitle) {
 async function createDummyFile(appTitle, data) {
   const fileName = `${appTitle} Full Version Unlocked`
   const fileFolder = path.join('apps', appTitle, 'file', fileName);
-  const sizeInBytes = 1048576
+  const sizeInBytes = parseInt(data['filesize']) * 1048576
 
   if (!fs.existsSync(fileFolder)) {
     fs.mkdirSync(fileFolder, {recursive: true});
@@ -446,14 +498,26 @@ async function createZipFile(appTitle, data) {
   const browser = await puppeteer.launch({
     headless: true,
     slowMo: 250,
-    devtools: true
+    devtools: true,
+    executablePath: executablePath(),
+    userDataDir: "./user_data"
   });
   const page = await browser.newPage();
-  let imageList = []
+
+
+  // console.log(`Testing the stealth plugin..`)
+  // await page.goto('https://bot.sannysoft.com')
+  // await page.waitForTimeout(5000)
+  // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
   await page.goto(url);
   console.log(`Opened page: ${url}\n`);
 
+  await checkLogin(page, url)
+
+  const fileSize = await getFileSize(page)
+  data['filesize'] = fileSize
+  console.log(`Extracted file size: ${fileSize}`);
 
   const apkName = searchTerm.trim()
   data['apkname'] = apkName
@@ -463,6 +527,7 @@ async function createZipFile(appTitle, data) {
   data['apptitle'] = appTitle
   console.log(`Extracted title: ${appTitle}`);
 
+  let imageList = []
   const thumbURL = await getThumbnail(page)
   imageList.push(thumbURL)
   console.log(`Extracted thumbnail: ${imageList.length}`);
@@ -481,13 +546,13 @@ async function createZipFile(appTitle, data) {
   console.log(`Extracted comments: ${comments.length}`);
 
   // console.log(data, '\n')
-  
+
   downloadAppImages(imageList, appTitle)
   .then(() => overlayImages(appTitle))
   .then(() => createVideoFromImages(appTitle))
   .then(() => concatVideos(appTitle))
-  .then(() => insertData(data))
-  .then(() => exportData())
+  // .then(() => insertData(data))
+  // .then(() => exportData())
   .then(() => createDummyFile(appTitle, data))
   .then(() => createZipFile(appTitle, data))
   .then(() => {
