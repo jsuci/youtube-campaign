@@ -7,7 +7,6 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
-
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +17,10 @@ const { randomBytes } = require('crypto');
 const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
+const { google } = require('googleapis');
+const { promisify } = require('util');
+const { readFile } = require('fs').promises;
+
 const knex = require('knex')({
   client: 'pg',
   connection: {
@@ -27,7 +30,6 @@ const knex = require('knex')({
     database: 'ytcampaign',
   },
 });
-
 
 
 // getting data
@@ -61,14 +63,15 @@ async function getFileSize(page) {
   const reviewBtn = await page.$$('text/arrow_forward');
   await reviewBtn[0].click();
   await new Promise(resolve => setTimeout(resolve, 1000));
-  const dlSize = await page.$$eval('.sMUprd', elements => {
-    return elements.filter(element => {
-      const ariaLabel = element.querySelector('.q078ud').textContent;
-      return ariaLabel === 'Download Size';
-    }).map(element => element.querySelector('.reAt0').textContent.trim() + '\n');
+  const downloadSizeText = await page.$eval('div.D1uV5e + div.G1zzid > div:nth-child(4) > div.reAt0', div => div.textContent.trim().split(' ')[0]);
+  
+  await page.evaluate(() => {
+    const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
+    const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
+    clearElement.click();
   });
 
-  return dlSize[0].replace('MB', '').trim()
+  return downloadSizeText
 }
 
 
@@ -114,6 +117,13 @@ async function getComments(page) {
       return ariaLabel === 'Rated 5 stars out of five stars';
     }).map(element => element.querySelector('.h3YV2d').textContent.trim() + '\n');
   });
+
+  await page.evaluate(() => {
+    const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
+    const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
+    clearElement.click();
+  });
+
   
   return elements
 }
@@ -173,7 +183,6 @@ async function exportData() {
 
 
 // creating files
-
 async function downloadFile(url, path) {
   return new Promise((resolve, reject) => {
     https.get(url, response => {
@@ -421,34 +430,50 @@ async function concatVideos(appTitle) {
 
 }
 
-
 async function createDummyFile(appTitle, data) {
-  const fileName = `${appTitle} Full Version Unlocked`
+  const fileName = `${appTitle} Full Version Unlocked`;
   const fileFolder = path.join('apps', appTitle, 'file', fileName);
-  const sizeInBytes = parseInt(data['filesize']) * 1048576
+  const sizeInBytes = parseInt(data['filesize']) * 1048576;
 
   if (!fs.existsSync(fileFolder)) {
     fs.mkdirSync(fileFolder, {recursive: true});
     console.log(`Created directory: ${fileFolder}`);
   }
 
-  const filePath = path.join(fileFolder, `${data['apkname']}.apk`)
+  const filePath = path.join(fileFolder, `${data['apkname']}.apk`);
 
   const buffer = randomBytes(sizeInBytes);
   await fs.promises.writeFile(filePath, buffer);
   console.log(`Dummy file created successfully!`);
 
+  const password = 'V9R7Abj9!aq#';
+  const zipPath = path.join(fileFolder, `[MOD] ${data['apkname']}.zip`);
+  const output = fs.createWriteStream(zipPath);
+
+  const archive = archiver.create(
+    'zip-encrypted',
+    {zlib: {level: 8},
+    encryptionMethod: 'aes256',
+    password: password});
+
+  archive.pipe(output);
+  archive.file(filePath, {name: `${data['apkname']}.apk`});
+  await archive.finalize();
+
+  console.log(`Encrypted zip file created successfully!`);
+
+  fs.unlinkSync(filePath);
+  console.log(`Original file deleted successfully!`);
 
   const textPath = path.join(fileFolder, 'Instructions.txt');
   const textContent = 'Instructions:\n\nTo extract the contents of this zip file, you will need a password.\nThe password is inside a text file named "Password.txt".\n\nYou can download "Password.txt" from here: https://filestrue.com/1313942';
-  
+
   fs.writeFileSync(textPath, textContent);
   console.log(`Instruction file created successfully!`);
-
 }
 
 
-async function createZipFile(appTitle, data) {
+async function createZipFile(appTitle) {
   const fileName = `${appTitle} Full Version Unlocked`
   const fileFolder = path.join('apps', appTitle, 'file', fileName)
   const zipName = fileFolder + '.zip'
@@ -458,7 +483,7 @@ async function createZipFile(appTitle, data) {
 
   // create a new zip file
   const archive = archiver.create(
-    'zip-encrypted',
+    'zip',
     {zlib: {level: 8},
     encryptionMethod: 'aes256',
     password: 'V9R7Abj9!aq#'});
@@ -486,8 +511,41 @@ async function createZipFile(appTitle, data) {
     });
 
   })
-  
+}
 
+
+// GOOGLE DRIVE
+async function uploadFileToDrive(appTitle) {
+  // Load the credentials JSON file
+  const credentials = await readFile('yt-campaign-eeeb3d9fe81a.json', 'utf8');
+
+  // Authenticate with the Google Drive API using a service account
+  const auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(credentials),
+    scopes: ['https://www.googleapis.com/auth/drive.file'],
+  });
+
+  // Create a new Drive instance
+  const drive = google.drive({ version: 'v3', auth });
+
+  try {
+    // Get the ID of the 'premiumunlockedapk' folder
+    const folderName = 'premiumunlockedapk';
+    const fileMetadata = {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+    };
+    const folderResponse = await drive.files.list({
+      resource: fileMetadata,
+      fields: 'id',
+    });
+    const folderId = folderResponse.data.id;
+
+    console.log(folderId)
+
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 
@@ -513,54 +571,61 @@ async function createZipFile(appTitle, data) {
   await page.goto(url);
   console.log(`Opened page: ${url}\n`);
 
-  await checkLogin(page, url)
 
-  const fileSize = await getFileSize(page)
-  data['filesize'] = fileSize
-  console.log(`Extracted file size: ${fileSize}`);
+  await uploadFileToDrive('Wolfoo Making Crafts -Handmade')
 
-  const apkName = searchTerm.trim()
-  data['apkname'] = apkName
-  console.log(`Extracted apkName: ${apkName}`);
+  // await checkLogin(page, url)
 
-  const appTitle = await getTitle(page)
-  data['apptitle'] = appTitle
-  console.log(`Extracted title: ${appTitle}`);
+  // await getComments(page)
 
-  let imageList = []
-  const thumbURL = await getThumbnail(page)
-  imageList.push(thumbURL)
-  console.log(`Extracted thumbnail: ${imageList.length}`);
+  // const fileSize = await getFileSize(page)
+  // data['filesize'] = fileSize
+  // console.log(`Extracted file size: ${fileSize}`);
 
-  const appImages = await getAppImages(page)
-  imageList = imageList.concat(appImages)
-  data['images'] = imageList
-  console.log(`Extracted appImages: ${appImages.length}`);
+  // const apkName = searchTerm.trim()
+  // data['apkname'] = apkName
+  // console.log(`Extracted apkName: ${apkName}`);
 
-  const description = await getDescription(page)
-  data['appdesc'] = description
-  console.log(`Extracted description: ${description.length}`);
+  // const appTitle = await getTitle(page)
+  // data['apptitle'] = appTitle
+  // console.log(`Extracted title: ${appTitle}`);
 
-  const comments = await getComments(page)
-  data['comments'] = comments
-  console.log(`Extracted comments: ${comments.length}`);
+  // let imageList = []
+  // const thumbURL = await getThumbnail(page)
+  // imageList.push(thumbURL)
+  // console.log(`Extracted thumbnail: ${imageList.length}`);
 
-  // console.log(data, '\n')
+  // const appImages = await getAppImages(page)
+  // imageList = imageList.concat(appImages)
+  // data['images'] = imageList
+  // console.log(`Extracted appImages: ${appImages.length}`);
 
-  downloadAppImages(imageList, appTitle)
-  .then(() => overlayImages(appTitle))
-  .then(() => createVideoFromImages(appTitle))
-  .then(() => concatVideos(appTitle))
-  // .then(() => insertData(data))
-  // .then(() => exportData())
-  .then(() => createDummyFile(appTitle, data))
-  .then(() => createZipFile(appTitle, data))
-  .then(() => {
-    console.log('All done!');
-  })
-  .catch((err) => {
-    console.error('Error:', err);
-  });
+  // const description = await getDescription(page)
+  // data['appdesc'] = description
+  // console.log(`Extracted description: ${description.length}`);
+
+  // const comments = await getComments(page)
+  // data['comments'] = comments
+  // console.log(`Extracted comments: ${comments.length}`);
+
+  // // console.log(data, '\n')
+
+
+
+  // downloadAppImages(imageList, appTitle)
+  // .then(() => overlayImages(appTitle))
+  // .then(() => createVideoFromImages(appTitle))
+  // .then(() => concatVideos(appTitle))
+  // // .then(() => insertData(data))
+  // // .then(() => exportData())
+  // .then(() => createDummyFile(appTitle, data))
+  // .then(() => createZipFile(appTitle))
+  // .then(() => {
+  //   console.log('All done!');
+  // })
+  // .catch((err) => {
+  //   console.error('Error:', err);
+  // });
   
 
   await browser.close();

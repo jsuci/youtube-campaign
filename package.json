@@ -20,6 +20,8 @@
     "archiver-zip-encrypted": "^1.0.11",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
+    "google-auth-library": "^8.7.0",
+    "googleapis": "^112.0.0",
     "json2csv": "^6.0.0-alpha.2",
     "knex": "^2.4.2",
     "pg": "^8.9.0",
@@ -27,6 +29,7 @@
     "puppeteer-extra": "^3.3.4",
     "puppeteer-extra-plugin-session": "^1.0.1",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
-    "sharp": "^0.31.3"
+    "sharp": "^0.31.3",
+    "util": "^0.12.5"
   }
 }
