@@ -1,7 +1,8 @@
-require('dotenv').config()
-const email = process.env.EMAIL
-const password = process.env.PASSWORD
+// require('dotenv').config()
+// const email = process.env.EMAIL
+// const password = process.env.PASSWORD
 
+const readline = require('readline');
 const {executablePath} = require('puppeteer')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -33,6 +34,55 @@ const knex = require('knex')({
 
 
 // getting data
+async function getUserInput(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+async function checkEnv() {
+  // Check if .env file exists
+  if (fs.existsSync('.env')) {
+    require('dotenv').config();
+    return;
+  }
+
+  // If .env file does not exist, prompt user for email and password
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const email = await new Promise((resolve) => {
+    rl.question('Enter your email: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
+  const password = await new Promise((resolve) => {
+    rl.question('Enter your password: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
+  rl.close();
+
+  // Write email and password to .env file
+  const envString = `EMAIL=${email}\nPASSWORD=${password}\n`;
+  fs.writeFileSync('.env', envString);
+
+  // Load environment variables from .env file
+  require('dotenv').config();
+}
+
 async function checkLogin(page, url) {
   const profileElement = await page.$('.VfPpkd-Bz112c-LgbsSe > img');
   const attributeValue = await page.evaluate((el, attr) => el.getAttribute(attr), profileElement, 'src');
@@ -40,11 +90,13 @@ async function checkLogin(page, url) {
   if (attributeValue.includes('anonymous')) {
     console.log(`You are not logged in`);
 
+    await checkEnv()
+
     await page.goto('https://accounts.google.com/Login', { waitUntil: 'networkidle2' });
-    await page.type('input[type="email"]', email);
+    await page.type('input[type="email"]', process.env.EMAIL);
     await page.click('#identifierNext');
     await page.waitForSelector('input[type="password"]', { visible: true });
-    await page.type('input[type="password"]', password);
+    await page.type('input[type="password"]', process.env.PASSWORD);
     await page.click('#passwordNext');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
     await page.waitForSelector('text/Welcome', { visible: true });
@@ -57,7 +109,6 @@ async function checkLogin(page, url) {
     console.log(`You are logged in`);
   }
 }
-
 
 async function getFileSize(page) {
   const reviewBtn = await page.$$('text/arrow_forward');
@@ -73,8 +124,6 @@ async function getFileSize(page) {
 
   return downloadSizeText
 }
-
-
 
 async function getTitle(page) {
   const invalidChars = /[\\/:*?"'<>|]/g;
@@ -97,14 +146,12 @@ async function getThumbnail(page) {
   return thumbnailURL;
 }
 
-
 async function getAppImages(page) {
   return await page.evaluate(() => {
     const images = Array.from(document.querySelectorAll('div[role="listitem"] img'));
     return images.map(img => img.getAttribute('src').replace('w526-h296', 'w2560-h1440'));
   });
 }
-
 
 async function getComments(page) {
   const reviewBtn = await page.waitForSelector('text/See all reviews');
@@ -161,7 +208,6 @@ async function viewData() {
   });
 }
 
-
 async function exportData() {
   knex.select('*')
   .from('apps')
@@ -212,7 +258,6 @@ async function downloadFile(url, path) {
   });
 }
 
-
 async function downloadAppImages(imageList, appTitle) {
   const directory = path.join('apps', appTitle);
   let i = 0;
@@ -228,8 +273,6 @@ async function downloadAppImages(imageList, appTitle) {
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
-
-
 
 async function overlayImages(appTitle) {
   // Read files from input folder
@@ -280,7 +323,6 @@ async function overlayImages(appTitle) {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
-
 
 async function createVideoFromImages(appTitle) {
   const imageDirectory = path.join('apps', appTitle, 'output');
@@ -348,7 +390,6 @@ async function createVideoFromImages(appTitle) {
   });
 
 }
-
 
 async function concatVideos(appTitle) {
   const videoPath = path.join('apps', appTitle, 'video');
@@ -472,7 +513,6 @@ async function createDummyFile(appTitle, data) {
   console.log(`Instruction file created successfully!`);
 }
 
-
 async function createZipFile(appTitle) {
   const fileName = `${appTitle} Full Version Unlocked`
   const fileFolder = path.join('apps', appTitle, 'file', fileName)
@@ -550,17 +590,24 @@ async function uploadFileToDrive(appTitle) {
 
 
 (async () => {
+
+  const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
   const data = {}
-  const searchTerm = process.argv[2];
   const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
   const browser = await puppeteer.launch({
-    headless: true,
-    slowMo: 250,
+    headless: false,
+    args: [`--window-size=375,667`],
+    defaultViewport: {
+      width:375,
+      height:667
+    },
+    slowMo: 1000,
     devtools: true,
     executablePath: executablePath(),
     userDataDir: "./user_data"
   });
   const page = await browser.newPage();
+
 
 
   // console.log(`Testing the stealth plugin..`)
@@ -569,63 +616,60 @@ async function uploadFileToDrive(appTitle) {
   // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
   await page.goto(url);
-  console.log(`Opened page: ${url}\n`);
+  console.log(`Opening page: ${url}\n`);
 
+  // await uploadFileToDrive('Wolfoo Making Crafts -Handmade')
 
-  await uploadFileToDrive('Wolfoo Making Crafts -Handmade')
+  await checkLogin(page, url)
 
-  // await checkLogin(page, url)
+  await getComments(page)
 
-  // await getComments(page)
+  const fileSize = await getFileSize(page)
+  data['filesize'] = fileSize
+  console.log(`Extracted file size: ${fileSize}`);
 
-  // const fileSize = await getFileSize(page)
-  // data['filesize'] = fileSize
-  // console.log(`Extracted file size: ${fileSize}`);
+  const apkName = searchTerm.trim()
+  data['apkname'] = apkName
+  console.log(`Extracted apkName: ${apkName}`);
 
-  // const apkName = searchTerm.trim()
-  // data['apkname'] = apkName
-  // console.log(`Extracted apkName: ${apkName}`);
+  const appTitle = await getTitle(page)
+  data['apptitle'] = appTitle
+  console.log(`Extracted title: ${appTitle}`);
 
-  // const appTitle = await getTitle(page)
-  // data['apptitle'] = appTitle
-  // console.log(`Extracted title: ${appTitle}`);
+  let imageList = []
+  const thumbURL = await getThumbnail(page)
+  imageList.push(thumbURL)
+  console.log(`Extracted thumbnail: ${imageList.length}`);
 
-  // let imageList = []
-  // const thumbURL = await getThumbnail(page)
-  // imageList.push(thumbURL)
-  // console.log(`Extracted thumbnail: ${imageList.length}`);
+  const appImages = await getAppImages(page)
+  imageList = imageList.concat(appImages)
+  data['images'] = imageList
+  console.log(`Extracted appImages: ${appImages.length}`);
 
-  // const appImages = await getAppImages(page)
-  // imageList = imageList.concat(appImages)
-  // data['images'] = imageList
-  // console.log(`Extracted appImages: ${appImages.length}`);
+  const description = await getDescription(page)
+  data['appdesc'] = description
+  console.log(`Extracted description: ${description.length}`);
 
-  // const description = await getDescription(page)
-  // data['appdesc'] = description
-  // console.log(`Extracted description: ${description.length}`);
+  const comments = await getComments(page)
+  data['comments'] = comments
+  console.log(`Extracted comments: ${comments.length}`);
 
-  // const comments = await getComments(page)
-  // data['comments'] = comments
-  // console.log(`Extracted comments: ${comments.length}`);
+  console.log(data, '\n')
 
-  // // console.log(data, '\n')
-
-
-
-  // downloadAppImages(imageList, appTitle)
-  // .then(() => overlayImages(appTitle))
-  // .then(() => createVideoFromImages(appTitle))
-  // .then(() => concatVideos(appTitle))
-  // // .then(() => insertData(data))
-  // // .then(() => exportData())
-  // .then(() => createDummyFile(appTitle, data))
-  // .then(() => createZipFile(appTitle))
-  // .then(() => {
-  //   console.log('All done!');
-  // })
-  // .catch((err) => {
-  //   console.error('Error:', err);
-  // });
+  downloadAppImages(imageList, appTitle)
+  .then(() => overlayImages(appTitle))
+  .then(() => createVideoFromImages(appTitle))
+  .then(() => concatVideos(appTitle))
+  // .then(() => insertData(data))
+  // .then(() => exportData())
+  .then(() => createDummyFile(appTitle, data))
+  .then(() => createZipFile(appTitle))
+  .then(() => {
+    console.log('All done!');
+  })
+  .catch((err) => {
+    console.error('Error:', err);
+  });
   
 
   await browser.close();
