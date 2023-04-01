@@ -76,7 +76,7 @@ async function checkEnv() {
   rl.close();
 
   // Write email and password to .env file
-  const envString = `EMAIL=${email}\nPASSWORD=${password}\n`;
+  const envString = `EMAIL='${email}'\nPASSWORD='${password}'\n`;
   fs.writeFileSync('.env', envString);
 
   // Load environment variables from .env file
