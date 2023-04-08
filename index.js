@@ -14,7 +14,7 @@ const path = require('path');
 const sharp = require('sharp');
 const spawn = require('child_process').spawn
 const { Parser } = require('json2csv');
-const { randomBytes } = require('crypto');
+const { randomBytes } = require('node:crypto');
 const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 

@@ -18,7 +18,6 @@
   "homepage": "https://github.com/jsuci/youtube-campaign#readme",
   "dependencies": {
     "archiver-zip-encrypted": "^1.0.11",
-    "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "google-auth-library": "^8.7.0",
     "googleapis": "^112.0.0",
