@@ -99,7 +99,8 @@ async function checkLogin(page, url) {
     await page.type('input[type="password"]', process.env.PASSWORD);
     await page.click('#passwordNext');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
-    await page.waitForSelector('text/Welcome', { visible: true });
+    console.log('\nPlease check your device for confirmation...\n')
+    await page.waitForSelector('text/Welcome', { visible: true, timeout: 300000 });
     console.log('Welcome, you are now logged in')
 
     await page.goto(url);
@@ -281,7 +282,7 @@ async function overlayImages(appTitle) {
   console.log(`\nFound ${inputFiles.length} files in ${inputFolder}`);
 
   // Read files from overlay folder
-  const overlayFolder = 'overlays/PNG'
+  const overlayFolder = 'overlays/png'
   const overlayFiles = fs.readdirSync(overlayFolder);
   console.log(`Found ${overlayFiles.length} files in ${overlayFolder}`);
 
@@ -556,8 +557,27 @@ async function createZipFile(appTitle) {
 
 // GOOGLE DRIVE
 async function uploadFileToDrive(appTitle) {
-  // Load the credentials JSON file
-  const credentials = await readFile('yt-campaign-eeeb3d9fe81a.json', 'utf8');
+
+  // Check if the credentials file exists
+  try {
+    await fs.access('credentials.json');
+    console.log('Found credentials file');
+  } catch (error) {
+    console.error('Could not find credentials file');
+    console.error('To create a service account and generate credentials, follow these steps:');
+    console.error('1. Go to the Google Cloud Console');
+    console.error('2. Create a new project or select an existing one');
+    console.error('3. Navigate to the IAM & Admin > Service Accounts page');
+    console.error('4. Click the "Create Service Account" button');
+    console.error('5. Enter a name and description for the service account and click "Create"');
+    console.error('6. Add the necessary roles for the service account (e.g. "Editor" for full access to Google Drive)');
+    console.error('7. Click the "Create Key" button to download a JSON file containing the private key for the service account');
+    console.error('8. Rename the downloaded file to "credentials.json" and place it in your project directory');
+    process.exit(1); // Exit the process with a non-zero exit code to indicate an error
+  }
+
+  // Read the contents of the credentials file
+  const credentials = await fs.readFile('credentials.json', 'utf8');
 
   // Authenticate with the Google Drive API using a service account
   const auth = new google.auth.GoogleAuth({
@@ -598,14 +618,13 @@ async function uploadFileToDrive(appTitle) {
     headless: false,
     args: [
       `--window-size=375,667`,
-      `--devtools-flags=disable`
     ],
-    defaultViewport: {
-      width:375,
-      height:667
-    },
+    // defaultViewport: {
+    //   width:375,
+    //   height:667
+    // },
     slowMo: 350,
-    devtools: true,
+    devtools: false,
     executablePath: executablePath(),
     userDataDir: "./user_data"
   });
@@ -620,8 +639,6 @@ async function uploadFileToDrive(appTitle) {
 
   await page.goto(url);
   console.log(`Opening page: ${url}\n`);
-
-  // await uploadFileToDrive('Wolfoo Making Crafts -Handmade')
 
   await checkLogin(page, url)
 
@@ -663,10 +680,11 @@ async function uploadFileToDrive(appTitle) {
   .then(() => overlayImages(appTitle))
   .then(() => createVideoFromImages(appTitle))
   .then(() => concatVideos(appTitle))
-  // .then(() => insertData(data))
-  // .then(() => exportData())
+  .then(() => insertData(data))
+  .then(() => exportData())
   .then(() => createDummyFile(appTitle, data))
   .then(() => createZipFile(appTitle))
+  .then(() => uploadFileToDrive(appTitle))
   .then(() => {
     console.log('All done!');
   })
