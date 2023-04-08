@@ -113,17 +113,26 @@ async function checkLogin(page, url) {
 
 async function getFileSize(page) {
   const reviewBtn = await page.$$('text/arrow_forward');
+  let downloadSizeText = 0
   await reviewBtn[0].click();
   await new Promise(resolve => setTimeout(resolve, 1000));
-  const downloadSizeText = await page.$eval('div.D1uV5e + div.G1zzid > div:nth-child(4) > div.reAt0', div => div.textContent.trim().split(' ')[0]);
+
+  try {
+    downloadSizeText = await page.$eval('div.D1uV5e + div.G1zzid > div:nth-child(4) > div.reAt0', div => div.textContent.trim().split(' ')[0]);
+    await page.evaluate(() => {
+      const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
+      const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
+      clearElement.click();
+    });
   
-  await page.evaluate(() => {
-    const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
-    const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
-    clearElement.click();
-  });
+  } catch (error) {
+    console.log('Error: reading download size');
+    downloadSizeText = Math.floor(Math.random() * (100 - 50)) + 50;
+    console.log('Generating random file size: ', downloadSizeText);
+  }
 
   return downloadSizeText
+
 }
 
 async function getTitle(page) {
@@ -155,25 +164,36 @@ async function getAppImages(page) {
 }
 
 async function getComments(page) {
-  const reviewBtn = await page.waitForSelector('text/See all reviews');
-  await reviewBtn.click();
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  const elements = await page.$$eval('.RHo1pe', elements => {
-    return elements.filter(element => {
-      const ariaLabel = element.querySelector('.Jx4nYe div').getAttribute('aria-label');
-      return ariaLabel === 'Rated 5 stars out of five stars';
-    }).map(element => element.querySelector('.h3YV2d').textContent.trim() + '\n');
-  });
-
-  await page.evaluate(() => {
-    const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
-    const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
-    clearElement.click();
-  });
-
   
-  return elements
+  try {
+
+    const reviewBtn = await page.waitForSelector('text/See all reviews');
+    await reviewBtn.click();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  
+    const elements = await page.$$eval('.RHo1pe', elements => {
+      return elements.filter(element => {
+        const ariaLabel = element.querySelector('.Jx4nYe div').getAttribute('aria-label');
+        return ariaLabel === 'Rated 5 stars out of five stars';
+      }).map(element => element.querySelector('.h3YV2d').textContent.trim() + '\n');
+    });
+  
+    await page.evaluate(() => {
+      const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
+      const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
+      clearElement.click();
+    });
+
+    return elements
+  
+  } catch (error) {
+    console.log('Error: reading reviews');
+    const elements = []
+    console.log('Generating empty reviews: ', elements);
+
+    return elements
+  }
+
 }
 
 // store data to postgres
@@ -611,87 +631,81 @@ async function uploadFileToDrive(appTitle) {
 
 (async () => {
 
-  const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-  const data = {}
-  const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-  const browser = await puppeteer.launch({
-    headless: false,
-    args: [
-      `--window-size=375,667`,
-    ],
-    // defaultViewport: {
-    //   width:375,
-    //   height:667
-    // },
-    slowMo: 350,
-    devtools: false,
-    executablePath: executablePath(),
-    userDataDir: "./user_data"
-  });
-  const page = await browser.newPage();
+  try {
 
+    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    const data = {}
+    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    const browser = await puppeteer.launch({
+      headless: false,
+      args: [
+        `--window-size=375,667`,
+      ],
+      slowMo: 350,
+      devtools: false,
+      executablePath: executablePath(),
+      userDataDir: "./user_data"
+    });
 
+    const page = await browser.newPage();
 
-  // console.log(`Testing the stealth plugin..`)
-  // await page.goto('https://bot.sannysoft.com')
-  // await page.waitForTimeout(5000)
-  // await page.screenshot({ path: 'stealth.png', fullPage: true })
+    // console.log(`Testing the stealth plugin..`)
+    // await page.goto('https://bot.sannysoft.com')
+    // await page.waitForTimeout(5000)
+    // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-  await page.goto(url);
-  console.log(`Opening page: ${url}\n`);
+    await page.goto(url);
+    console.log(`Opening page: ${url}\n`);
 
-  await checkLogin(page, url)
+    await checkLogin(page, url)
 
-  await getComments(page)
+    await getComments(page)
 
-  const fileSize = await getFileSize(page)
-  data['filesize'] = fileSize
-  console.log(`Extracted file size: ${fileSize}`);
+    const fileSize = await getFileSize(page)
+    data['filesize'] = fileSize
+    console.log(`Extracted file size: ${fileSize}`);
 
-  const apkName = searchTerm.trim()
-  data['apkname'] = apkName
-  console.log(`Extracted apkName: ${apkName}`);
+    const apkName = searchTerm.trim()
+    data['apkname'] = apkName
+    console.log(`Extracted apkName: ${apkName}`);
 
-  const appTitle = await getTitle(page)
-  data['apptitle'] = appTitle
-  console.log(`Extracted title: ${appTitle}`);
+    const appTitle = await getTitle(page)
+    data['apptitle'] = appTitle
+    console.log(`Extracted title: ${appTitle}`);
 
-  let imageList = []
-  const thumbURL = await getThumbnail(page)
-  imageList.push(thumbURL)
-  console.log(`Extracted thumbnail: ${imageList.length}`);
+    let imageList = []
+    const thumbURL = await getThumbnail(page)
+    imageList.push(thumbURL)
+    console.log(`Extracted thumbnail: ${imageList.length}`);
 
-  const appImages = await getAppImages(page)
-  imageList = imageList.concat(appImages)
-  data['images'] = imageList
-  console.log(`Extracted appImages: ${appImages.length}`);
+    const appImages = await getAppImages(page)
+    imageList = imageList.concat(appImages)
+    data['images'] = imageList
+    console.log(`Extracted appImages: ${appImages.length}`);
 
-  const description = await getDescription(page)
-  data['appdesc'] = description
-  console.log(`Extracted description: ${description.length}`);
+    const description = await getDescription(page)
+    data['appdesc'] = description
+    console.log(`Extracted description: ${description.length}`);
 
-  const comments = await getComments(page)
-  data['comments'] = comments
-  console.log(`Extracted comments: ${comments.length}`);
+    const comments = await getComments(page)
+    data['comments'] = comments
+    console.log(`Extracted comments: ${comments.length}`);
 
-  console.log(data, '\n')
+    console.log(data, '\n')
 
-  downloadAppImages(imageList, appTitle)
-  .then(() => overlayImages(appTitle))
-  .then(() => createVideoFromImages(appTitle))
-  .then(() => concatVideos(appTitle))
-  .then(() => insertData(data))
-  .then(() => exportData())
-  .then(() => createDummyFile(appTitle, data))
-  .then(() => createZipFile(appTitle))
-  .then(() => uploadFileToDrive(appTitle))
-  .then(() => {
-    console.log('All done!');
-  })
-  .catch((err) => {
+    await downloadAppImages(imageList, appTitle);
+    await overlayImages(appTitle);
+    await createVideoFromImages(appTitle);
+    await concatVideos(appTitle);
+    await createDummyFile(appTitle, data);
+    await createZipFile(appTitle);
+    // await uploadFileToDrive(appTitle);
+    console.log('All done!'); // No need to use await here
+
+    await browser.close();
+
+  } catch (err) {
     console.error('Error:', err);
-  });
+  }
   
-
-  await browser.close();
 })();
