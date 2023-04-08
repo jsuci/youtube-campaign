@@ -596,12 +596,15 @@ async function uploadFileToDrive(appTitle) {
   const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
   const browser = await puppeteer.launch({
     headless: false,
-    args: [`--window-size=375,667`],
+    args: [
+      `--window-size=375,667`,
+      `--devtools-flags=disable`
+    ],
     defaultViewport: {
       width:375,
       height:667
     },
-    slowMo: 1000,
+    slowMo: 350,
     devtools: true,
     executablePath: executablePath(),
     userDataDir: "./user_data"
