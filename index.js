@@ -127,7 +127,7 @@ async function getFileSize(page) {
   
   } catch (error) {
     console.log('Error: reading download size');
-    downloadSizeText = Math.floor(Math.random() * (100 - 50)) + 50;
+    downloadSizeText = Math.floor(Math.random() * (50 - 30)) + 30;
     console.log('Generating random file size: ', downloadSizeText);
   }
 
@@ -558,16 +558,11 @@ async function createZipFile(appTitle) {
 
   // listen for the 'close' event on the output file stream
   output.on('close', function() {
-    console.log(archive.pointer() + ' total bytes');
+    console.log('Zip archive has a total of ', archive.pointer());
     console.log('Archiver has been finalized and the output file descriptor has closed.');
 
-    fs.rmSync(fileFolder, { recursive: true, force: true }, (err) => {
-      if (err) {
-        console.error(err);
-        return;
-      }
-      console.log('File folder deleted successfully!');
-    });
+    fs.rmSync(fileFolder, { recursive: true, force: true });
+    console.log('File folder deleted successfully!');
 
   })
 }
@@ -575,51 +570,99 @@ async function createZipFile(appTitle) {
 
 // GOOGLE DRIVE
 async function uploadFileToDrive(appTitle) {
-
-  // Check if the credentials file exists
   try {
-    await fs.access('credentials.json');
-    console.log('Found credentials file');
-  } catch (error) {
-    console.error('Could not find credentials file');
-    console.error('To create a service account and generate credentials, follow these steps:');
-    console.error('1. Go to the Google Cloud Console');
-    console.error('2. Create a new project or select an existing one');
-    console.error('3. Navigate to the IAM & Admin > Service Accounts page');
-    console.error('4. Click the "Create Service Account" button');
-    console.error('5. Enter a name and description for the service account and click "Create"');
-    console.error('6. Add the necessary roles for the service account (e.g. "Editor" for full access to Google Drive)');
-    console.error('7. Click the "Create Key" button to download a JSON file containing the private key for the service account');
-    console.error('8. Rename the downloaded file to "credentials.json" and place it in your project directory');
-    process.exit(1); // Exit the process with a non-zero exit code to indicate an error
-  }
 
-  // Read the contents of the credentials file
-  const credentials = await fs.readFile('credentials.json', 'utf8');
+    // Read the contents of the credentials file
+    let credentials
 
-  // Authenticate with the Google Drive API using a service account
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(credentials),
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
-  });
+    try {
+      credentials = await readFile('credentials.json');
+    } catch (error) {
+      console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
+      process.exit(1);
+    }
+    // Authenticate with the Google Drive API using a service account
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(credentials),
+      scopes: ['https://www.googleapis.com/auth/drive'],
+    });
 
-  // Create a new Drive instance
-  const drive = google.drive({ version: 'v3', auth });
+    // Create a new Drive instance
+    const drive = google.drive({ version: 'v3', auth });
 
-  try {
     // Get the ID of the 'premiumunlockedapk' folder
-    const folderName = 'premiumunlockedapk';
     const fileMetadata = {
-      name: folderName,
+      name: 'premiumunlockedapk',
       mimeType: 'application/vnd.google-apps.folder',
     };
-    const folderResponse = await drive.files.list({
-      resource: fileMetadata,
-      fields: 'id',
-    });
-    const folderId = folderResponse.data.id;
 
-    console.log(folderId)
+    const folderResponse = await drive.files.list({
+      q: `mimeType='${fileMetadata.mimeType}' and trashed = false and name='${fileMetadata.name}'`,
+      fields: 'files(id, name)',
+      
+    });
+
+    if (folderResponse.data.files.length == 0) {
+      console.log(`Google Drive folder not found.`);
+      process.exit(1);
+    } 
+
+    const folderId = folderResponse.data.files[0].id;
+    console.log(`Folder ID: ${folderId}`);
+
+    // Upload zip file
+    const fileName = `${appTitle} Full Version Unlocked`
+    const filePath = path.join('apps', appTitle, 'file', fileName + '.zip')
+
+    // Read the contents of the zip archive into a buffer
+    const fileContent = fs.createReadStream(filePath);
+
+  // Create a new file in the specified folder
+  drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [folderId],
+      mimeType: 'application/zip'
+    },
+    media: {
+      mimeType: 'application/zip',
+      body: fileContent
+    }
+  }, (err, res) => {
+    if (err) {
+      console.error(err);
+    } else {
+      const fileId = res.data.id;
+      console.log(`File upload done with file ID: ${fileId}`);
+
+      // Set the file's permissions to be accessible to anyone with the link
+      drive.permissions.create({
+        fileId: fileId,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone'
+        }
+      }, (err, res) => {
+        if (err) {
+          console.error(err);
+        } else {
+          console.log(`File permissions set.`);
+          
+          // Get the file's shareable link
+          drive.files.get({
+            fileId: fileId,
+            fields: 'webViewLink'
+          }, (err, res) => {
+            if (err) {
+              console.error(err);
+            } else {
+              console.log(`Shareable link: ${res.data.webViewLink}`);
+            }
+          });
+        }
+      });
+    }
+  });
 
   } catch (error) {
     console.error(error);
@@ -631,76 +674,76 @@ async function uploadFileToDrive(appTitle) {
 
   try {
 
-    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    const data = {}
-    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-    const browser = await puppeteer.launch({
-      headless: false,
-      args: [
-        `--window-size=375,667`,
-      ],
-      slowMo: 350,
-      devtools: false,
-      executablePath: executablePath(),
-      userDataDir: "./user_data"
-    });
+    // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    // const data = {}
+    // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    // const browser = await puppeteer.launch({
+    //   headless: false,
+    //   args: [
+    //     `--window-size=375,667`,
+    //   ],
+    //   slowMo: 350,
+    //   devtools: false,
+    //   executablePath: executablePath(),
+    //   userDataDir: "./user_data"
+    // });
 
-    const page = await browser.newPage();
+    // const page = await browser.newPage();
 
     // console.log(`Testing the stealth plugin..`)
     // await page.goto('https://bot.sannysoft.com')
     // await page.waitForTimeout(5000)
     // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-    await page.goto(url);
-    console.log(`Opening page: ${url}\n`);
+    // await page.goto(url);
+    // console.log(`Opening page: ${url}\n`);
 
-    await checkLogin(page, url)
+    // await checkLogin(page, url)
 
-    await getComments(page)
+    // await getComments(page)
 
-    const fileSize = await getFileSize(page)
-    data['filesize'] = fileSize
-    console.log(`Extracted file size: ${fileSize}`);
+    // const appTitle = await getTitle(page)
+    // data['apptitle'] = appTitle
+    // console.log(`Extracted title: ${appTitle}`);
 
-    const apkName = searchTerm.trim()
-    data['apkname'] = apkName
-    console.log(`Extracted apkName: ${apkName}`);
+    // const comments = await getComments(page)
+    // data['comments'] = comments
+    // console.log(`Extracted comments: ${comments.length}`);
 
-    const appTitle = await getTitle(page)
-    data['apptitle'] = appTitle
-    console.log(`Extracted title: ${appTitle}`);
+    // const fileSize = await getFileSize(page)
+    // data['filesize'] = fileSize
+    // console.log(`Extracted file size: ${fileSize}`);
 
-    let imageList = []
-    const thumbURL = await getThumbnail(page)
-    imageList.push(thumbURL)
-    console.log(`Extracted thumbnail: ${imageList.length}`);
+    // const apkName = searchTerm.trim()
+    // data['apkname'] = apkName
+    // console.log(`Extracted apkName: ${apkName}`);
 
-    const appImages = await getAppImages(page)
-    imageList = imageList.concat(appImages)
-    data['images'] = imageList
-    console.log(`Extracted appImages: ${appImages.length}`);
+    // let imageList = []
+    // const thumbURL = await getThumbnail(page)
+    // imageList.push(thumbURL)
+    // console.log(`Extracted thumbnail: ${imageList.length}`);
 
-    const description = await getDescription(page)
-    data['appdesc'] = description
-    console.log(`Extracted description: ${description.length}`);
+    // const appImages = await getAppImages(page)
+    // imageList = imageList.concat(appImages)
+    // data['images'] = imageList
+    // console.log(`Extracted appImages: ${appImages.length}`);
 
-    const comments = await getComments(page)
-    data['comments'] = comments
-    console.log(`Extracted comments: ${comments.length}`);
+    // const description = await getDescription(page)
+    // data['appdesc'] = description
+    // console.log(`Extracted description: ${description.length}`);
 
-    console.log(data, '\n')
+    // console.log(data, '\n')
+    // console.log('Done extracting data. Closing browser.\n')
 
-    await downloadAppImages(imageList, appTitle);
-    await overlayImages(appTitle);
-    await createVideoFromImages(appTitle);
-    await concatVideos(appTitle);
-    await createDummyFile(appTitle, data);
-    await createZipFile(appTitle);
-    // await uploadFileToDrive(appTitle);
-    console.log('All done!'); // No need to use await here
+    // await browser.close();
 
-    await browser.close();
+    // await downloadAppImages(imageList, appTitle);
+    // await overlayImages(appTitle);
+    // await createVideoFromImages(appTitle);
+    // await concatVideos(appTitle);
+    // await createDummyFile(appTitle, data);
+    // await createZipFile(appTitle);
+    await uploadFileToDrive('Hello Kitty Lunchbox');
 
   } catch (err) {
     console.error('Error:', err);
