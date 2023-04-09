@@ -543,11 +543,9 @@ async function createZipFile(appTitle) {
   const output = fs.createWriteStream(zipName);
 
   // create a new zip file
-  const archive = archiver.create(
-    'zip',
-    {zlib: {level: 8},
-    encryptionMethod: 'aes256',
-    password: 'V9R7Abj9!aq#'});
+  const archive = archiver.create('zip', {
+    zlib: { level: 0 } // set the compression level to 0 for no compression
+  });
 
   // pipe the archive to the output file
   archive.pipe(output);
