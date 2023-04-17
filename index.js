@@ -25,8 +25,9 @@ const cliProgress = require('cli-progress');
 
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csv = require('csv-parser');
-
-
+const { stringify } = require('csv-stringify');
+const he = require('he');
+const { datacatalog } = require('googleapis/build/src/apis/datacatalog');
 
 const knex = require('knex')({
   client: 'pg',
@@ -37,7 +38,6 @@ const knex = require('knex')({
     database: 'ytcampaign',
   },
 });
-
 
 // getting data
 async function getUserInput(question) {
@@ -152,7 +152,7 @@ async function getTitle(page) {
 async function getDescription(page) {
   const descElement = await page.$('div[data-g-id="description"]');
   const description = await page.evaluate(element => element.innerHTML , descElement);
-  return description;
+  return he.encode(description);
 }
 
 async function getThumbnail(page) {
@@ -170,34 +170,35 @@ async function getAppImages(page) {
 }
 
 async function getComments(page) {
-  
+
+
   try {
 
     const reviewBtn = await page.waitForSelector('text/See all reviews');
     await reviewBtn.click();
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   
-    const elements = await page.$$eval('.RHo1pe', elements => {
+    const comments = await page.$$eval('.RHo1pe', elements => {
       return elements.filter(element => {
         const ariaLabel = element.querySelector('.Jx4nYe div').getAttribute('aria-label');
         return ariaLabel === 'Rated 5 stars out of five stars';
-      }).map(element => element.querySelector('.h3YV2d').textContent.trim() + '\n');
+      }).map(element => element.querySelector('.h3YV2d').textContent.trim());
     });
-  
+
+    const encodedComments = comments.map(comment => he.encode(comment));
+
     await page.evaluate(() => {
       const elements = document.querySelectorAll('.google-material-icons.VfPpkd-kBDsod');
       const clearElement = Array.from(elements).find(e => e.innerText === 'clear');
       clearElement.click();
     });
 
-    return elements
+    return encodedComments;
   
   } catch (error) {
     console.log('Error: reading reviews');
-    const elements = []
-    console.log('Generating empty reviews: ', elements);
 
-    return elements
+    return []
   }
 
 }
@@ -253,7 +254,6 @@ async function exportData() {
   .catch(err => console.log(err))
   .finally(() => knex.destroy());
 }
-
 
 // creating files
 async function downloadFile(url, path) {
@@ -685,7 +685,7 @@ async function uploadFileToDrive(appTitle) {
     });
 
     const shareableLink = linkRes.data.webViewLink;
-    console.log(`Shareable link: ${shareableLink}`);
+    console.log(`Shareable link: ${shareableLink}\n`);
 
     return {fileId: fileId, gdrive: shareableLink};
 
@@ -695,15 +695,9 @@ async function uploadFileToDrive(appTitle) {
 }
 
 // Export to CSV
-async function exportToCSV(appTitle) {
-  
-  // Example JSON object with 'apptitle' field
-  let data = [
-    { apptitle: 'App 1', name: 'John', age: 30 },
-    { apptitle: 'App 2', name: 'Jane', age: 25 },
-    { apptitle: 'App 3', name: 'Bob', age: 40 }
-  ];
-  
+async function exportToCSV(data) {
+
+
   // Function to check if an entry already exists based on 'apptitle'
   const findIndex = (array, key, value) => {
     for (let i = 0; i < array.length; i++) {
@@ -718,13 +712,12 @@ async function exportToCSV(appTitle) {
   if (fs.existsSync('data.csv')) {
     // Read existing CSV data into memory
     const existingData = [];
-    fs.createReadStream('output.csv')
+    fs.createReadStream('data.csv')
       .pipe(csv())
       .on('data', (row) => {
         existingData.push(row);
       })
       .on('end', () => {
-        console.log('Existing data:', existingData);
   
         // Update existing entries or add new ones
         for (let i = 0; i < data.length; i++) {
@@ -735,54 +728,69 @@ async function exportToCSV(appTitle) {
             existingData.push(data[i]);
           }
         }
-  
+
         // Write updated data to CSV file
         const csvWriter = createCsvWriter({
-          path: 'output.csv',
+          path: 'data.csv',
           header: [
-            { id: 'apptitle', title: 'App Title' },
-            { id: 'name', title: 'Name' },
-            { id: 'age', title: 'Age' }
+            { id: 'apptitle', title: 'apptitle' },
+            { id: 'images', title: 'images' },
+            { id: 'appdesc', title: 'appdesc' },
+            { id: 'comments', title: 'comments' },
+            { id: 'apkname', title: 'apkname' },
+            { id: 'gdriveId', title: 'gdriveId' },
+            { id: 'gdriveLink', title: 'gdriveLink' },
           ]
         });
-  
-        csvWriter.writeRecords(existingData)
-          .then(() => {
-            console.log('CSV file updated successfully!');
-          })
-          .catch((error) => {
-            console.error('Error updating CSV file:', error);
-          });
-      });
-  } else {
-    // Create new CSV file with provided data
-    const csvWriter = createCsvWriter({
-      path: 'output.csv',
-      header: [
-        { id: 'apptitle', title: 'App Title' },
-        { id: 'name', title: 'Name' },
-        { id: 'age', title: 'Age' }
-      ]
-    });
-  
-    csvWriter.writeRecords(data)
-      .then(() => {
-        console.log('CSV file created successfully!');
-      })
-      .catch((error) => {
-        console.error('Error creating CSV file:', error);
-      });
-  }
-  
-}
 
+        // Convert the data to a CSV string with escaped special characters
+        stringify(data, { header: true, delimiter: '@@' }, (err, csvString) => {
+          if (err) {
+            console.error('Error converting data to CSV:', err);
+          } else {
+            // Write the CSV string to a file using createCsvWriter
+            csvWriter.writeRecords(csvString).then(() => {
+              console.log('CSV file created successfully!');
+            }).catch((err) => {
+              console.error('Error writing CSV file:', err);
+            });
+          }
+        });
+
+      });
+
+  } else {
+    // // // Create new CSV file with provided data
+    // const csvWriter = createCsvWriter({
+    //   path: 'data.csv',
+    //   header: [
+    //     { id: 'apptitle', title: 'apptitle' },
+    //     { id: 'images', title: 'images' },
+    //     { id: 'appdesc', title: 'appdesc' },
+    //     { id: 'comments', title: 'comments' },
+    //     { id: 'apkname', title: 'apkname' },
+    //     { id: 'gdriveId', title: 'gdriveId' },
+    //     { id: 'gdriveLink', title: 'gdriveLink' },
+    //   ]
+    // });
+
+    // csvWriter.writeRecords(stringifier)
+    //   .then(() => {
+    //     console.log('CSV file created successfully!');
+    //   })
+    //   .catch((error) => {
+    //     console.error('Error creating CSV file:', error);
+    //   });
+  }
+
+}
 
 (async () => {
 
   try {
 
     // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    const data = {}
+    // const data = {}
     // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
     // const browser = await puppeteer.launch({
     //   headless: false,
@@ -806,8 +814,6 @@ async function exportToCSV(appTitle) {
     // console.log(`Opening page: ${url}\n`);
 
     // await checkLogin(page, url)
-
-    // await getComments(page)
 
     // const appTitle = await getTitle(page)
     // data['apptitle'] = appTitle
@@ -839,19 +845,79 @@ async function exportToCSV(appTitle) {
     // data['appdesc'] = description
     // console.log(`Extracted description: ${description.length}`);
 
-    // console.log(data, '\n')
     // console.log('Done extracting data. Closing browser.\n')
 
     // await browser.close();
 
-    // await downloadAppImages(imageList, appTitle);
-    // await overlayImages(appTitle);
-    // await createVideoFromImages(appTitle);
-    // await concatVideos(appTitle);
-    // await createDummyFile(appTitle, data);
-    // await createZipFile(appTitle);
-    const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    // // await downloadAppImages(imageList, appTitle);
+    // // await overlayImages(appTitle);
+    // // await createVideoFromImages(appTitle);
+    // // await concatVideos(appTitle);
+    // // await createDummyFile(appTitle, data);
+    // // await createZipFile(appTitle);
+    // const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
 
+    // data['gdriveId'] = gDrive.fileId
+    // data['gdriveLink'] = gDrive.gdrive
+
+
+    const data = {
+      apptitle: 'Toca Kitchen',
+      comments: [
+        `My expirence was i liked it because the blender and you guys should upgrade the blend
+    er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks
+    weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C
+    ;.`,
+        `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love
+     it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you downl
+    oad this right now to hesitate bc it&#x27;s AWESOME!`
+      ],
+      filesize: '61',
+      apkname: 'com.tocaboca.tocakitchen',
+      images: [
+        `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb
+    4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
+        `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5u
+    ilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
+      ],
+      appdesc: `Do you want to be the head chef of your very own sushi restaurant? Check out T
+    oca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_
+    GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Go
+    ld!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food? Now you can! Toca Boc
+    a kids apps bring you Toca Kitchen, where you cook and play with food for four hungry char
+    acters. Pick any ingredient and prepare it in your own way! Slice, boil, fry, cook, microw
+    ave or mix? And wait for your hungry friend&#xB4;s response&#x2026;&#x3C;br&#x3E;&#x3C;br&
+    #x3E;We created this educational app for kids to give the mud cakes a new face, a complete
+     virtual make-over which the kids will love! The characters fearful reactions to different
+     meals will make you giggle. Does the cat like salty fish? Would the boy eat potatoes and
+    greens? Mix and mismatch you own meal with no high scores or time limits in this fun cooki
+    ng app. &#x3C;br&#x3E;&#x3C;br&#x3E;- Four cute characters to cook for - each with their o
+    wn favorite food!&#x3C;br&#x3E;- 12 different ingredients that can be prepared in 180 diff
+    erent ways!&#x3C;br&#x3E;- Slice, boil, fry, cook, microwave anything you like! &#x3C;br&#
+    x3E;- Professional and fun kids app design!&#x3C;br&#x3E;- No rules or stress!&#x3C;br&#x3
+    E;- Kid-friendly interface&#x3C;br&#x3E;- No in-app purchases&#x3C;br&#x3E;- No third part
+    y advertising&#x3C;br&#x3E;&#x3C;br&#x3E;Toca Kitchen is not a game - it&#x27;s a toy wher
+    e you and your kids get to explore cooking. What happens if you mix a carrot and then fry
+    it? Will the cat like it? And what is the bull&#x27;s favorite food? Toca Kitchen supports
+     free play for all ages and is a great way to use your imagination.&#x3C;br&#x3E;&#x3C;br&
+    #x3E;As with all Toca Boca apps, there are no high scores, time limits or stressful music.
+     Rest assured this app for kids let&#x2019;s kids play however they want!&#x3C;br&#x3E;&#x
+    3C;br&#x3E;***&#x3C;br&#x3E;&#x3C;br&#x3E;ABOUT TOCA BOCA&#x3C;br&#x3E;At Toca Boca, we be
+    lieve in the power of play to spark kids&#x2019; imaginations and help them learn about th
+    e world. We design our products from the kids&#x27; perspective to empower kids to be play
+    ful, to be creative and to be who they want to be. Our products include award-winning apps
+     that have been downloaded more than 130 million times in 215 countries and offer fun, saf
+    e, open-ended play experiences. Learn more about Toca Boca and our products at tocaboca.co
+    m.&#x3C;br&#x3E;&#x3C;br&#x3E;PRIVACY POLICY&#x3C;br&#x3E;Privacy is an issue that we take
+     very seriously. To learn more about how we work with these matters, please read our priva
+    cy policy: http://tocaboca.com/privacy`,
+      gdriveId: '1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF',
+      gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=
+    drivesdk`
+    }
+    
+
+    await exportToCSV([data])
 
   } catch (err) {
     console.error('Error:', err);
