@@ -21,6 +21,7 @@ archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 const { google } = require('googleapis');
 const { promisify } = require('util');
 const { readFile } = require('fs').promises;
+const cliProgress = require('cli-progress');
 
 const knex = require('knex')({
   client: 'pg',
@@ -603,66 +604,74 @@ async function uploadFileToDrive(appTitle) {
     });
 
     if (folderResponse.data.files.length == 0) {
-      console.log(`Google Drive folder not found.`);
+      console.log(`Google Drive folder not found.\n`);
       process.exit(1);
     } 
 
     const folderId = folderResponse.data.files[0].id;
-    console.log(`Folder ID: ${folderId}`);
+    console.log(`Google Drive folder found.\n`);
+    
 
     // Upload zip file
     const fileName = `${appTitle} Full Version Unlocked`
     const filePath = path.join('apps', appTitle, 'file', fileName + '.zip')
-
-    // Read the contents of the zip archive into a buffer
     const fileContent = fs.createReadStream(filePath);
+    const fileSize = fs.statSync(filePath).size;
 
-  // Create a new file in the specified folder
-  drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [folderId],
-      mimeType: 'application/zip'
-    },
-    media: {
-      mimeType: 'application/zip',
-      body: fileContent
-    }
-  }, (err, res) => {
-    if (err) {
-      console.error(err);
-    } else {
-      const fileId = res.data.id;
-      console.log(`File upload done with file ID: ${fileId}`);
+    console.log(`Uploading ${fileName}`);
 
-      // Set the file's permissions to be accessible to anyone with the link
-      drive.permissions.create({
-        fileId: fileId,
-        requestBody: {
-          role: 'reader',
-          type: 'anyone'
+    const progressBar = new cliProgress.SingleBar({
+      format: `Progress | {bar} | {percentage}% | ETA: {eta}s`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true
+    });
+    
+    progressBar.start(fileSize, 0);
+
+    // Create a new file in the specified folder
+    const res = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        parents: [folderId],
+        mimeType: 'application/zip'
+      },
+      media: {
+        mimeType: 'application/zip',
+        body: fileContent
+      }
+    }, {
+      onUploadProgress: (evt) => {
+        if (evt) {
+          progressBar.update(evt.bytesRead);
+          if (evt.bytesRead === fileSize) {
+            progressBar.stop();
+          }
         }
-      }, (err, res) => {
-        if (err) {
-          console.error(err);
-        } else {
-          console.log(`File permissions set.`);
-          
-          // Get the file's shareable link
-          drive.files.get({
-            fileId: fileId,
-            fields: 'webViewLink'
-          }, (err, res) => {
-            if (err) {
-              console.error(err);
-            } else {
-              console.log(`Shareable link: ${res.data.webViewLink}`);
-            }
-          });
-        }
-      });
-    }
-  });
+      }
+    });
+
+    const fileId = res.data.id;
+    console.log(`\nFile upload done.`);
+    console.log(`File ID: ${fileId}`)
+
+    // Set the file's permissions to be accessible to anyone with the link
+    await drive.permissions.create({
+      fileId: fileId,
+      requestBody: {
+        role: 'reader',
+        type: 'anyone'
+      }
+    });
+
+    // Get the file's shareable link
+    const linkRes = await drive.files.get({
+      fileId: fileId,
+      fields: 'webViewLink'
+    });
+
+    const shareableLink = linkRes.data.webViewLink;
+    console.log(`Shareable link: ${shareableLink}`);
 
   } catch (error) {
     console.error(error);
@@ -675,7 +684,7 @@ async function uploadFileToDrive(appTitle) {
   try {
 
     // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    // const data = {}
+    const data = {}
     // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
     // const browser = await puppeteer.launch({
     //   headless: false,
