@@ -23,6 +23,11 @@ const { promisify } = require('util');
 const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
 
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const csv = require('csv-parser');
+
+
+
 const knex = require('knex')({
   client: 'pg',
   connection: {
@@ -568,8 +573,7 @@ async function createZipFile(appTitle) {
   })
 }
 
-
-// GOOGLE DRIVE
+// Upload to GDRIVE
 async function uploadFileToDrive(appTitle) {
   try {
 
@@ -665,33 +669,6 @@ async function uploadFileToDrive(appTitle) {
       console.log(`\nFile upload done with file ID: ${res.data.id}`);
     }
 
-
-    // // Create a new file in the specified folder
-    // const res = await drive.files.create({
-    //   requestBody: {
-    //     name: fileName,
-    //     parents: [folderId],
-    //     mimeType: 'application/zip'
-    //   },
-    //   media: {
-    //     mimeType: 'application/zip',
-    //     body: fileContent
-    //   }
-    // }, {
-    //   onUploadProgress: (evt) => {
-    //     if (evt) {
-    //       progressBar.update(evt.bytesRead);
-    //       if (evt.bytesRead === fileSize) {
-    //         progressBar.stop();
-    //       }
-    //     }
-    //   }
-    // });
-
-    // const fileId = res.data.id;
-    // console.log(`\nFile upload done.`);
-    // console.log(`File ID: ${fileId}`)
-
     // Set the file's permissions to be accessible to anyone with the link
     await drive.permissions.create({
       fileId: fileId,
@@ -715,6 +692,88 @@ async function uploadFileToDrive(appTitle) {
   } catch (error) {
     console.error(error);
   }
+}
+
+// Export to CSV
+async function exportToCSV(appTitle) {
+  
+  // Example JSON object with 'apptitle' field
+  let data = [
+    { apptitle: 'App 1', name: 'John', age: 30 },
+    { apptitle: 'App 2', name: 'Jane', age: 25 },
+    { apptitle: 'App 3', name: 'Bob', age: 40 }
+  ];
+  
+  // Function to check if an entry already exists based on 'apptitle'
+  const findIndex = (array, key, value) => {
+    for (let i = 0; i < array.length; i++) {
+      if (array[i][key] === value) {
+        return i;
+      }
+    }
+    return -1;
+  };
+  
+  // Check if output CSV file already exists
+  if (fs.existsSync('data.csv')) {
+    // Read existing CSV data into memory
+    const existingData = [];
+    fs.createReadStream('output.csv')
+      .pipe(csv())
+      .on('data', (row) => {
+        existingData.push(row);
+      })
+      .on('end', () => {
+        console.log('Existing data:', existingData);
+  
+        // Update existing entries or add new ones
+        for (let i = 0; i < data.length; i++) {
+          const index = findIndex(existingData, 'apptitle', data[i].apptitle);
+          if (index !== -1) {
+            existingData[index] = data[i];
+          } else {
+            existingData.push(data[i]);
+          }
+        }
+  
+        // Write updated data to CSV file
+        const csvWriter = createCsvWriter({
+          path: 'output.csv',
+          header: [
+            { id: 'apptitle', title: 'App Title' },
+            { id: 'name', title: 'Name' },
+            { id: 'age', title: 'Age' }
+          ]
+        });
+  
+        csvWriter.writeRecords(existingData)
+          .then(() => {
+            console.log('CSV file updated successfully!');
+          })
+          .catch((error) => {
+            console.error('Error updating CSV file:', error);
+          });
+      });
+  } else {
+    // Create new CSV file with provided data
+    const csvWriter = createCsvWriter({
+      path: 'output.csv',
+      header: [
+        { id: 'apptitle', title: 'App Title' },
+        { id: 'name', title: 'Name' },
+        { id: 'age', title: 'Age' }
+      ]
+    });
+  
+    csvWriter.writeRecords(data)
+      .then(() => {
+        console.log('CSV file created successfully!');
+      })
+      .catch((error) => {
+        console.error('Error creating CSV file:', error);
+      });
+  }
+  
 }
 
 
@@ -792,8 +851,7 @@ async function uploadFileToDrive(appTitle) {
     // await createDummyFile(appTitle, data);
     // await createZipFile(appTitle);
     const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
-    
-    console.log(gDrive.fileId, gDrive.gdrive)
+
 
   } catch (err) {
     console.error('Error:', err);
