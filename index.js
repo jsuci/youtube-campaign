@@ -604,12 +604,12 @@ async function uploadFileToDrive(appTitle) {
     });
 
     if (folderResponse.data.files.length == 0) {
-      console.log(`Google Drive folder not found.\n`);
+      console.log(`Google Drive folder not found.`);
       process.exit(1);
     } 
 
     const folderId = folderResponse.data.files[0].id;
-    console.log(`Google Drive folder found.\n`);
+    console.log(`Google Drive folder found.`);
     
 
     // Upload zip file
@@ -618,8 +618,6 @@ async function uploadFileToDrive(appTitle) {
     const fileContent = fs.createReadStream(filePath);
     const fileSize = fs.statSync(filePath).size;
 
-    console.log(`Uploading ${fileName}`);
-
     const progressBar = new cliProgress.SingleBar({
       format: `Progress | {bar} | {percentage}% | ETA: {eta}s`,
       barCompleteChar: '\u2588',
@@ -627,33 +625,72 @@ async function uploadFileToDrive(appTitle) {
       hideCursor: true
     });
     
-    progressBar.start(fileSize, 0);
 
-    // Create a new file in the specified folder
-    const res = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [folderId],
-        mimeType: 'application/zip'
-      },
-      media: {
-        mimeType: 'application/zip',
-        body: fileContent
-      }
-    }, {
-      onUploadProgress: (evt) => {
-        if (evt) {
-          progressBar.update(evt.bytesRead);
-          if (evt.bytesRead === fileSize) {
-            progressBar.stop();
+    // Check if file already exists in the folder
+    const query = `mimeType='application/zip' and trashed = false and name='${fileName}' and parents in '${folderId}'`;
+    const fileList = await drive.files.list({q: query});
+    let fileId
+  
+    if (fileList.data.files.length > 0) {
+      fileId = fileList.data.files[0].id;
+
+      console.log(`File already exists.`);
+    } else {
+      // Create a new file in the specified folder
+
+      console.log(`\nUploading ${fileName}`);
+      progressBar.start(fileSize, 0);
+      const res = await drive.files.create({
+        requestBody: {
+          name: fileName,
+          parents: [folderId],
+          mimeType: 'application/zip'
+        },
+        media: {
+          mimeType: 'application/zip',
+          body: fileContent
+        }
+      }, {
+        onUploadProgress: (evt) => {
+          if (evt) {
+            progressBar.update(evt.bytesRead);
+            if (evt.bytesRead === fileSize) {
+              progressBar.stop();
+            }
           }
         }
-      }
-    });
+      });
 
-    const fileId = res.data.id;
-    console.log(`\nFile upload done.`);
-    console.log(`File ID: ${fileId}`)
+      fileId = res.data.id
+      console.log(`\nFile upload done with file ID: ${res.data.id}`);
+    }
+
+
+    // // Create a new file in the specified folder
+    // const res = await drive.files.create({
+    //   requestBody: {
+    //     name: fileName,
+    //     parents: [folderId],
+    //     mimeType: 'application/zip'
+    //   },
+    //   media: {
+    //     mimeType: 'application/zip',
+    //     body: fileContent
+    //   }
+    // }, {
+    //   onUploadProgress: (evt) => {
+    //     if (evt) {
+    //       progressBar.update(evt.bytesRead);
+    //       if (evt.bytesRead === fileSize) {
+    //         progressBar.stop();
+    //       }
+    //     }
+    //   }
+    // });
+
+    // const fileId = res.data.id;
+    // console.log(`\nFile upload done.`);
+    // console.log(`File ID: ${fileId}`)
 
     // Set the file's permissions to be accessible to anyone with the link
     await drive.permissions.create({
@@ -672,6 +709,8 @@ async function uploadFileToDrive(appTitle) {
 
     const shareableLink = linkRes.data.webViewLink;
     console.log(`Shareable link: ${shareableLink}`);
+
+    return {fileId: fileId, gdrive: shareableLink};
 
   } catch (error) {
     console.error(error);
@@ -752,7 +791,9 @@ async function uploadFileToDrive(appTitle) {
     // await concatVideos(appTitle);
     // await createDummyFile(appTitle, data);
     // await createZipFile(appTitle);
-    await uploadFileToDrive('Hello Kitty Lunchbox');
+    const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    
+    console.log(gDrive.fileId, gDrive.gdrive)
 
   } catch (err) {
     console.error('Error:', err);
