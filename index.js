@@ -3,7 +3,7 @@
 // const password = process.env.PASSWORD
 
 const readline = require('readline');
-const {executablePath} = require('puppeteer')
+// const {executablePath} = require('puppeteer')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -19,7 +19,7 @@ const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
 const { google } = require('googleapis');
-const { promisify } = require('util');
+// const { promisify } = require('util');
 const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
 
@@ -746,171 +746,82 @@ async function exportToCSV(dataJson) {
       });
   });
 
-  
-
-  // // Check if CSV file exists
-  // if (fs.existsSync('data.csv')) {
-
-  //   // Read CSV file and check for duplicates
-  //   const results = [];
-  //   fs.createReadStream('data.csv')
-  //     .pipe(csv({
-  //       skipLines: 1,
-  //       separator: ';',
-  //       headers: ['apptitle','images','appdesc','comments','apkname','gdriveId','gdriveLink']
-  //     }))
-  //     .on('data', (data) => {
-  //       results.push(data);
-  //     })
-  //     .on('end', () => {
-  //       console.log(`Reading ${results.length} entries from data.csv`);
-  //     });
-
-  //     // Check if the data already exists in the existing data
-  //     const existingDataIndex = results.findIndex(existingData => existingData.apptitle === dataJson[0]['apptitle']);
-
-  //     // If the data exists, replace it with the new data
-  //     if (existingDataIndex !== -1) {
-  //       existingData[existingDataIndex] = dataJson[0];
-  //     }
-  //     else {
-  //       results.push(dataJson[0]);
-  //     }
-
-  //     // Save updated results to CSV file
-  //     const csvWriter = createCsvWriter({
-  //       path: 'data.csv',
-  //       header: [
-  //         { id: 'apptitle', title: 'apptitle' },
-  //         { id: 'images', title: 'images' },
-  //         { id: 'appdesc', title: 'appdesc' },
-  //         { id: 'comments', title: 'comments' },
-  //         { id: 'apkname', title: 'apkname' },
-  //         { id: 'gdriveid', title: 'gdriveid' },
-  //         { id: 'gdrivesrc', title: 'gdrivesrc' }
-  //       ],
-  //       fieldDelimiter : ';'
-  //     });
-
-  //     csvWriter.writeRecords(results).then(() => {
-  //       console.log('CSV file updated!');
-  //     });
-
-  // } else {
-  //   // Create CSV file
-  //   const csvWriter = createCsvWriter({
-  //     path: 'data.csv',
-  //     header: [
-  //       { id: 'apptitle', title: 'apptitle' },
-  //       { id: 'images', title: 'images' },
-  //       { id: 'appdesc', title: 'appdesc' },
-  //       { id: 'comments', title: 'comments' },
-  //       { id: 'apkname', title: 'apkname' },
-  //       { id: 'gdriveid', title: 'gdriveid' },
-  //       { id: 'gdrivesrc', title: 'gdrivesrc' }
-  //     ],
-  //     fieldDelimiter : ';'
-  //   });
-  //   csvWriter.writeRecords(data).then(() => {
-  //     console.log('CSV file created!');
-  //   });
-  // }
-
 }
 
 (async () => {
 
   try {
 
-    // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    // const data = {}
-    // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-    // const browser = await puppeteer.launch({
-    //   headless: false,
-    //   args: [
-    //     `--window-size=375,667`,
-    //   ],
-    //   slowMo: 350,
-    //   devtools: false,
-    //   executablePath: executablePath(),
-    //   userDataDir: "./user_data"
-    // });
+    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    const data = {}
+    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    const browser = await puppeteer.launch({
+      headless: false,
+      args: [
+        `--window-size=375,667`,
+      ],
+      slowMo: 350,
+      devtools: false,
+      executablePath: executablePath(),
+      userDataDir: "./user_data"
+    });
 
-    // const page = await browser.newPage();
+    const page = await browser.newPage();
 
     // console.log(`Testing the stealth plugin..`)
     // await page.goto('https://bot.sannysoft.com')
     // await page.waitForTimeout(5000)
     // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-    // await page.goto(url);
-    // console.log(`Opening page: ${url}\n`);
+    await page.goto(url);
+    console.log(`Opening page: ${url}\n`);
 
-    // await checkLogin(page, url)
+    await checkLogin(page, url)
 
-    // const appTitle = await getTitle(page)
-    // data['apptitle'] = appTitle
-    // console.log(`Extracted title: ${appTitle}`);
+    const appTitle = await getTitle(page)
+    data['apptitle'] = appTitle
+    console.log(`Extracted title: ${appTitle}`);
 
-    // const comments = await getComments(page)
-    // data['comments'] = comments
-    // console.log(`Extracted comments: ${comments.length}`);
+    const comments = await getComments(page)
+    data['comments'] = comments
+    console.log(`Extracted comments: ${comments.length}`);
 
-    // const fileSize = await getFileSize(page)
-    // data['filesize'] = fileSize
-    // console.log(`Extracted file size: ${fileSize}`);
+    const fileSize = await getFileSize(page)
+    data['filesize'] = fileSize
+    console.log(`Extracted file size: ${fileSize}`);
 
-    // const apkName = searchTerm.trim()
-    // data['apkname'] = apkName
-    // console.log(`Extracted apkName: ${apkName}`);
+    const apkName = searchTerm.trim()
+    data['apkname'] = apkName
+    console.log(`Extracted apkName: ${apkName}`);
 
-    // let imageList = []
-    // const thumbURL = await getThumbnail(page)
-    // imageList.push(thumbURL)
-    // console.log(`Extracted thumbnail: ${imageList.length}`);
+    let imageList = []
+    const thumbURL = await getThumbnail(page)
+    imageList.push(thumbURL)
+    console.log(`Extracted thumbnail: ${imageList.length}`);
 
-    // const appImages = await getAppImages(page)
-    // imageList = imageList.concat(appImages)
-    // data['images'] = imageList
-    // console.log(`Extracted appImages: ${appImages.length}`);
+    const appImages = await getAppImages(page)
+    imageList = imageList.concat(appImages)
+    data['images'] = imageList
+    console.log(`Extracted appImages: ${appImages.length}`);
 
-    // const description = await getDescription(page)
-    // data['appdesc'] = description
-    // console.log(`Extracted description: ${description.length}`);
+    const description = await getDescription(page)
+    data['appdesc'] = description
+    console.log(`Extracted description: ${description.length}`);
 
-    // console.log('Done extracting data. Closing browser.\n')
+    console.log('Done extracting data. Closing browser.\n')
 
-    // await browser.close();
+    await browser.close();
 
-    // // await downloadAppImages(imageList, appTitle);
-    // // await overlayImages(appTitle);
-    // // await createVideoFromImages(appTitle);
-    // // await concatVideos(appTitle);
-    // // await createDummyFile(appTitle, data);
-    // // await createZipFile(appTitle);
-    // const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    await downloadAppImages(imageList, appTitle);
+    await overlayImages(appTitle);
+    await createVideoFromImages(appTitle);
+    await concatVideos(appTitle);
+    await createDummyFile(appTitle, data);
+    await createZipFile(appTitle);
 
-    // data['gdriveId'] = gDrive.fileId
-    // data['gdriveLink'] = gDrive.gdrive
-
-
-    const data = {
-      apptitle: 'Toca Kitchenz',
-      comments: [
-        `My expirence was i liked it because the blender and you guys should upgrade the blender. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C;.`,
-        `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you download this right now to hesitate bc it&#x27;s AWESOME!`
-      ],
-      filesize: '61',
-      apkname: 'com.tocaboca.tocakitchen',
-      images: [
-        `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
-        `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5uilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
-      ],
-      appdesc: he.encode(`Do you want to be the head chef of your very own sushi restaurant? Check out Toca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_ GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Gold!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food? Now you can! Toca Boca kids apps bring you Toca Kitchen, where you cook and play with food for four hungry characters. Pick any ingredient and prepare it in your own way! Slice, boil, fry, cook, microwave or mix? And wait for your hungry friend&#xB4;s response&#x2026;&#x3C;br&#x3E;&#x3C;br&#x3E;We created this educational app for ''' or """ kids to give the mud cakes a new face, a complete virtual make-over which the kids will love! The characters fearful reactions to different meals will make you giggle. Does the cat like salty fish? Would the boy eat potatoes and greens? Mix and mismatch you own meal with no high scores or time limits in this fun cooking app. &#x3C;br&#x3E;&#x3C;br&#x3E;- Four cute characters to cook for - each with their own favorite food!&#x3C;br&#x3E;- 12 different ingredients that can be prepared in 180 different ways!&#x3C;br&#x3E;- Slice, boil, fry, cook, microwave anything you like! &#x3C;br&#x3E;- Professional and fun kids app design!&#x3C;br&#x3E;- No rules or stress!&#x3C;br&#x3E;- Kid-friendly interface&#x3C;br&#x3E;- No in-app purchases&#x3C;br&#x3E;- No third party advertising&#x3C;br&#x3E;&#x3C;br&#x3E;`),
-      gdriveid: `1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF`,
-      gdrivesrc: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
-    }
-    
+    const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    data['gdriveId'] = gDrive.fileId
+    data['gdriveLink'] = gDrive.gdrive
 
     await exportToCSV([data])
 
