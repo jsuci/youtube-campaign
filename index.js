@@ -1,4 +1,4 @@
-// require('dotenv').config()
+require('dotenv').config()
 // const email = process.env.EMAIL
 // const password = process.env.PASSWORD
 
@@ -19,9 +19,9 @@ const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
 const { google } = require('googleapis');
-// const { promisify } = require('util');
 const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
+const { OAuth2Client } = require('google-auth-library');
 
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csvParser = require('csv-parser');
@@ -77,10 +77,31 @@ async function checkEnv() {
     });
   });
 
+  const client_id = await new Promise((resolve) => {
+    rl.question('Enter your client_id: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
+  const client_secret = await new Promise((resolve) => {
+    rl.question('Enter your client_secret: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
   rl.close();
 
   // Write email and password to .env file
-  const envString = `EMAIL='${email}'\nPASSWORD='${password}'\n`;
+  const data = {
+    email: email,
+    password: password,
+    client_id: client_id,
+    client_secret: client_secret
+  }
+  const envString = Object.entries(data)
+  .map(([key, value]) => `${key}='${value}'`)
+  .join('\n');
+
   fs.writeFileSync('.env', envString);
 
   // Load environment variables from .env file
@@ -579,11 +600,12 @@ async function uploadFileToDrive(appTitle) {
     let credentials
 
     try {
-      credentials = await readFile('credentials.json');
+      credentials = await readFile('credentials-sa.json');
     } catch (error) {
       console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
       process.exit(1);
     }
+
     // Authenticate with the Google Drive API using a service account
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(credentials),
@@ -692,6 +714,38 @@ async function uploadFileToDrive(appTitle) {
   }
 }
 
+// Upload to Youtube
+async function uploadToYoutube() {
+
+  const CLIENT_ID = 'your_client_id';
+  const CLIENT_SECRET = 'your_client_secret';
+  const REDIRECT_URI = 'your_redirect_uri';
+  
+
+  // Authenticate with OAuth 2.0
+  const auth = await authenticate({
+    keyfilePath: 'credentials.json',
+    scopes: [
+      'https://www.googleapis.com/auth/youtube',
+      'https://www.googleapis.com/auth/youtube.upload'
+    ]
+  });
+
+  // Create a YouTube client with the authenticated credentials
+  const youtube = google.youtube({version: 'v3', auth});
+
+  youtube.channels.list({
+    part: 'snippet',
+    mine: true,
+  }, (err, res) => {
+    if (err) {
+      console.error(err);
+    } else {
+      console.log(res.data);
+    }
+  });
+}
+
 // Export to CSV
 async function exportToCSV(dataJson) {
 
@@ -748,82 +802,87 @@ async function exportToCSV(dataJson) {
 
 }
 
+
 (async () => {
 
   try {
 
-    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    const data = {}
-    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-    const browser = await puppeteer.launch({
-      headless: false,
-      args: [
-        `--window-size=375,667`,
-      ],
-      slowMo: 350,
-      devtools: false,
-      executablePath: executablePath(),
-      userDataDir: "./user_data"
-    });
+    // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    // const data = {}
+    // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    // const browser = await puppeteer.launch({
+    //   headless: false,
+    //   args: [
+    //     `--window-size=375,667`,
+    //   ],
+    //   slowMo: 350,
+    //   devtools: false,
+    //   executablePath: executablePath(),
+    //   userDataDir: "./user_data"
+    // });
 
-    const page = await browser.newPage();
+    // const page = await browser.newPage();
 
     // console.log(`Testing the stealth plugin..`)
     // await page.goto('https://bot.sannysoft.com')
     // await page.waitForTimeout(5000)
     // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-    await page.goto(url);
-    console.log(`Opening page: ${url}\n`);
+    // await page.goto(url);
+    // console.log(`Opening page: ${url}\n`);
 
-    await checkLogin(page, url)
+    // await checkLogin(page, url)
 
-    const appTitle = await getTitle(page)
-    data['apptitle'] = appTitle
-    console.log(`Extracted title: ${appTitle}`);
+    // const appTitle = await getTitle(page)
+    // data['apptitle'] = appTitle
+    // console.log(`Extracted title: ${appTitle}`);
 
-    const comments = await getComments(page)
-    data['comments'] = comments
-    console.log(`Extracted comments: ${comments.length}`);
+    // const comments = await getComments(page)
+    // data['comments'] = comments
+    // console.log(`Extracted comments: ${comments.length}`);
 
-    const fileSize = await getFileSize(page)
-    data['filesize'] = fileSize
-    console.log(`Extracted file size: ${fileSize}`);
+    // const fileSize = await getFileSize(page)
+    // data['filesize'] = fileSize
+    // console.log(`Extracted file size: ${fileSize}`);
 
-    const apkName = searchTerm.trim()
-    data['apkname'] = apkName
-    console.log(`Extracted apkName: ${apkName}`);
+    // const apkName = searchTerm.trim()
+    // data['apkname'] = apkName
+    // console.log(`Extracted apkName: ${apkName}`);
 
-    let imageList = []
-    const thumbURL = await getThumbnail(page)
-    imageList.push(thumbURL)
-    console.log(`Extracted thumbnail: ${imageList.length}`);
+    // let imageList = []
+    // const thumbURL = await getThumbnail(page)
+    // imageList.push(thumbURL)
+    // console.log(`Extracted thumbnail: ${imageList.length}`);
 
-    const appImages = await getAppImages(page)
-    imageList = imageList.concat(appImages)
-    data['images'] = imageList
-    console.log(`Extracted appImages: ${appImages.length}`);
+    // const appImages = await getAppImages(page)
+    // imageList = imageList.concat(appImages)
+    // data['images'] = imageList
+    // console.log(`Extracted appImages: ${appImages.length}`);
 
-    const description = await getDescription(page)
-    data['appdesc'] = description
-    console.log(`Extracted description: ${description.length}`);
+    // const description = await getDescription(page)
+    // data['appdesc'] = description
+    // console.log(`Extracted description: ${description.length}`);
 
-    console.log('Done extracting data. Closing browser.\n')
+    // console.log('Done extracting data. Closing browser.\n')
 
-    await browser.close();
+    // await browser.close();
 
-    await downloadAppImages(imageList, appTitle);
-    await overlayImages(appTitle);
-    await createVideoFromImages(appTitle);
-    await concatVideos(appTitle);
-    await createDummyFile(appTitle, data);
-    await createZipFile(appTitle);
+    // await downloadAppImages(imageList, appTitle);
+    // await overlayImages(appTitle);
+    // await createVideoFromImages(appTitle);
+    // await concatVideos(appTitle);
+    // await createDummyFile(appTitle, data);
+    // await createZipFile(appTitle);
 
-    const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
-    data['gdriveId'] = gDrive.fileId
-    data['gdriveLink'] = gDrive.gdrive
+    // const gDrive = await uploadFileToDrive(appTitle);
+    // data['gdriveId'] = gDrive.fileId
+    // data['gdriveLink'] = gDrive.gdrive
 
-    await exportToCSV([data])
+    // await exportToCSV([data])
+
+    // await uploadToYoutube()
+
+    await checkEnv()
 
   } catch (err) {
     console.error('Error:', err);
