@@ -1,9 +1,9 @@
-// require('dotenv').config()
+require('dotenv').config()
 // const email = process.env.EMAIL
 // const password = process.env.PASSWORD
 
 const readline = require('readline');
-const {executablePath} = require('puppeteer')
+// const {executablePath} = require('puppeteer')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -19,15 +19,13 @@ const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
 const { google } = require('googleapis');
-const { promisify } = require('util');
 const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
+const { OAuth2Client } = require('google-auth-library');
 
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-const csv = require('csv-parser');
-const { stringify } = require('csv-stringify');
+const csvParser = require('csv-parser');
 const he = require('he');
-const { datacatalog } = require('googleapis/build/src/apis/datacatalog');
 
 const knex = require('knex')({
   client: 'pg',
@@ -79,10 +77,31 @@ async function checkEnv() {
     });
   });
 
+  const client_id = await new Promise((resolve) => {
+    rl.question('Enter your client_id: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
+  const client_secret = await new Promise((resolve) => {
+    rl.question('Enter your client_secret: ', (answer) => {
+      resolve(answer);
+    });
+  });
+
   rl.close();
 
   // Write email and password to .env file
-  const envString = `EMAIL='${email}'\nPASSWORD='${password}'\n`;
+  const data = {
+    email: email,
+    password: password,
+    client_id: client_id,
+    client_secret: client_secret
+  }
+  const envString = Object.entries(data)
+  .map(([key, value]) => `${key}='${value}'`)
+  .join('\n');
+
   fs.writeFileSync('.env', envString);
 
   // Load environment variables from .env file
@@ -581,11 +600,12 @@ async function uploadFileToDrive(appTitle) {
     let credentials
 
     try {
-      credentials = await readFile('credentials.json');
+      credentials = await readFile('credentials-sa.json');
     } catch (error) {
       console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
       process.exit(1);
     }
+
     // Authenticate with the Google Drive API using a service account
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(credentials),
@@ -694,42 +714,71 @@ async function uploadFileToDrive(appTitle) {
   }
 }
 
-// Export to CSV
-async function exportToCSV(data) {
+// Upload to Youtube
+async function uploadToYoutube() {
 
-
-  // Function to check if an entry already exists based on 'apptitle'
-  const findIndex = (array, key, value) => {
-    for (let i = 0; i < array.length; i++) {
-      if (array[i][key] === value) {
-        return i;
-      }
-    }
-    return -1;
-  };
+  const CLIENT_ID = 'your_client_id';
+  const CLIENT_SECRET = 'your_client_secret';
+  const REDIRECT_URI = 'your_redirect_uri';
   
-  // Check if output CSV file already exists
-  if (fs.existsSync('data.csv')) {
-    // Read existing CSV data into memory
-    const existingData = [];
+
+  // Authenticate with OAuth 2.0
+  const auth = await authenticate({
+    keyfilePath: 'credentials.json',
+    scopes: [
+      'https://www.googleapis.com/auth/youtube',
+      'https://www.googleapis.com/auth/youtube.upload'
+    ]
+  });
+
+  // Create a YouTube client with the authenticated credentials
+  const youtube = google.youtube({version: 'v3', auth});
+
+  youtube.channels.list({
+    part: 'snippet',
+    mine: true,
+  }, (err, res) => {
+    if (err) {
+      console.error(err);
+    } else {
+      console.log(res.data);
+    }
+  });
+}
+
+// Export to CSV
+async function exportToCSV(dataJson) {
+
+  let existingData = [];
+  fs.access('data.csv', fs.constants.F_OK, (err) => {
+    if (err) {
+      fs.writeFileSync('data.csv', 'utf8');
+    }
     fs.createReadStream('data.csv')
-      .pipe(csv())
-      .on('data', (row) => {
-        existingData.push(row);
+      .pipe(csvParser({
+        skipLines: 1,
+        headers: ['apptitle','images','appdesc','comments','apkname','filesize', 'gdriveId','gdriveLink'],
+      }))
+      .on('data', data => {
+        existingData.push(data);
       })
       .on('end', () => {
-  
-        // Update existing entries or add new ones
-        for (let i = 0; i < data.length; i++) {
-          const index = findIndex(existingData, 'apptitle', data[i].apptitle);
-          if (index !== -1) {
-            existingData[index] = data[i];
-          } else {
-            existingData.push(data[i]);
-          }
+        console.log(`Reading ${existingData.length} entries from file`);
+
+        // Check if the data already exists in the existing data
+        const existingDataIndex = existingData.findIndex(e => e.apptitle === dataJson[0]['apptitle']);
+
+        // If the data exists, replace it with the new data
+        if (existingDataIndex !== -1) {
+          existingData[existingDataIndex] = dataJson[0];
+        }
+        else {
+          existingData.push(dataJson[0]);
         }
 
-        // Write updated data to CSV file
+        console.log(existingData)
+
+        // Save updated results to CSV file
         const csvWriter = createCsvWriter({
           path: 'data.csv',
           header: [
@@ -738,52 +787,21 @@ async function exportToCSV(data) {
             { id: 'appdesc', title: 'appdesc' },
             { id: 'comments', title: 'comments' },
             { id: 'apkname', title: 'apkname' },
-            { id: 'gdriveId', title: 'gdriveId' },
-            { id: 'gdriveLink', title: 'gdriveLink' },
-          ]
+            { id: 'filesize', title: 'filesize' },
+            { id: 'gdriveid', title: 'gdriveid' },
+            { id: 'gdrivesrc', title: 'gdrivesrc' }
+          ],
         });
 
-        // Convert the data to a CSV string with escaped special characters
-        stringify(data, { header: true, delimiter: '@@' }, (err, csvString) => {
-          if (err) {
-            console.error('Error converting data to CSV:', err);
-          } else {
-            // Write the CSV string to a file using createCsvWriter
-            csvWriter.writeRecords(csvString).then(() => {
-              console.log('CSV file created successfully!');
-            }).catch((err) => {
-              console.error('Error writing CSV file:', err);
-            });
-          }
+        csvWriter.writeRecords(existingData).then(() => {
+          console.log('CSV file updated!');
         });
 
       });
-
-  } else {
-    // // // Create new CSV file with provided data
-    // const csvWriter = createCsvWriter({
-    //   path: 'data.csv',
-    //   header: [
-    //     { id: 'apptitle', title: 'apptitle' },
-    //     { id: 'images', title: 'images' },
-    //     { id: 'appdesc', title: 'appdesc' },
-    //     { id: 'comments', title: 'comments' },
-    //     { id: 'apkname', title: 'apkname' },
-    //     { id: 'gdriveId', title: 'gdriveId' },
-    //     { id: 'gdriveLink', title: 'gdriveLink' },
-    //   ]
-    // });
-
-    // csvWriter.writeRecords(stringifier)
-    //   .then(() => {
-    //     console.log('CSV file created successfully!');
-    //   })
-    //   .catch((error) => {
-    //     console.error('Error creating CSV file:', error);
-    //   });
-  }
+  });
 
 }
+
 
 (async () => {
 
@@ -849,75 +867,22 @@ async function exportToCSV(data) {
 
     // await browser.close();
 
-    // // await downloadAppImages(imageList, appTitle);
-    // // await overlayImages(appTitle);
-    // // await createVideoFromImages(appTitle);
-    // // await concatVideos(appTitle);
-    // // await createDummyFile(appTitle, data);
-    // // await createZipFile(appTitle);
-    // const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    // await downloadAppImages(imageList, appTitle);
+    // await overlayImages(appTitle);
+    // await createVideoFromImages(appTitle);
+    // await concatVideos(appTitle);
+    // await createDummyFile(appTitle, data);
+    // await createZipFile(appTitle);
 
+    // const gDrive = await uploadFileToDrive(appTitle);
     // data['gdriveId'] = gDrive.fileId
     // data['gdriveLink'] = gDrive.gdrive
 
+    // await exportToCSV([data])
 
-    const data = {
-      apptitle: 'Toca Kitchen',
-      comments: [
-        `My expirence was i liked it because the blender and you guys should upgrade the blend
-    er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks
-    weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C
-    ;.`,
-        `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love
-     it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you downl
-    oad this right now to hesitate bc it&#x27;s AWESOME!`
-      ],
-      filesize: '61',
-      apkname: 'com.tocaboca.tocakitchen',
-      images: [
-        `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb
-    4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
-        `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5u
-    ilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
-      ],
-      appdesc: `Do you want to be the head chef of your very own sushi restaurant? Check out T
-    oca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_
-    GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Go
-    ld!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food? Now you can! Toca Boc
-    a kids apps bring you Toca Kitchen, where you cook and play with food for four hungry char
-    acters. Pick any ingredient and prepare it in your own way! Slice, boil, fry, cook, microw
-    ave or mix? And wait for your hungry friend&#xB4;s response&#x2026;&#x3C;br&#x3E;&#x3C;br&
-    #x3E;We created this educational app for kids to give the mud cakes a new face, a complete
-     virtual make-over which the kids will love! The characters fearful reactions to different
-     meals will make you giggle. Does the cat like salty fish? Would the boy eat potatoes and
-    greens? Mix and mismatch you own meal with no high scores or time limits in this fun cooki
-    ng app. &#x3C;br&#x3E;&#x3C;br&#x3E;- Four cute characters to cook for - each with their o
-    wn favorite food!&#x3C;br&#x3E;- 12 different ingredients that can be prepared in 180 diff
-    erent ways!&#x3C;br&#x3E;- Slice, boil, fry, cook, microwave anything you like! &#x3C;br&#
-    x3E;- Professional and fun kids app design!&#x3C;br&#x3E;- No rules or stress!&#x3C;br&#x3
-    E;- Kid-friendly interface&#x3C;br&#x3E;- No in-app purchases&#x3C;br&#x3E;- No third part
-    y advertising&#x3C;br&#x3E;&#x3C;br&#x3E;Toca Kitchen is not a game - it&#x27;s a toy wher
-    e you and your kids get to explore cooking. What happens if you mix a carrot and then fry
-    it? Will the cat like it? And what is the bull&#x27;s favorite food? Toca Kitchen supports
-     free play for all ages and is a great way to use your imagination.&#x3C;br&#x3E;&#x3C;br&
-    #x3E;As with all Toca Boca apps, there are no high scores, time limits or stressful music.
-     Rest assured this app for kids let&#x2019;s kids play however they want!&#x3C;br&#x3E;&#x
-    3C;br&#x3E;***&#x3C;br&#x3E;&#x3C;br&#x3E;ABOUT TOCA BOCA&#x3C;br&#x3E;At Toca Boca, we be
-    lieve in the power of play to spark kids&#x2019; imaginations and help them learn about th
-    e world. We design our products from the kids&#x27; perspective to empower kids to be play
-    ful, to be creative and to be who they want to be. Our products include award-winning apps
-     that have been downloaded more than 130 million times in 215 countries and offer fun, saf
-    e, open-ended play experiences. Learn more about Toca Boca and our products at tocaboca.co
-    m.&#x3C;br&#x3E;&#x3C;br&#x3E;PRIVACY POLICY&#x3C;br&#x3E;Privacy is an issue that we take
-     very seriously. To learn more about how we work with these matters, please read our priva
-    cy policy: http://tocaboca.com/privacy`,
-      gdriveId: '1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF',
-      gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=
-    drivesdk`
-    }
-    
+    // await uploadToYoutube()
 
-    await exportToCSV([data])
+    await checkEnv()
 
   } catch (err) {
     console.error('Error:', err);
