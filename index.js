@@ -21,9 +21,7 @@ const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
 
 const convertJsonToCsv = require('json-2-csv');
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csv = require('csv-parser');
-const { stringify } = require('csv-stringify');
 const he = require('he');
 
 
@@ -632,45 +630,8 @@ async function uploadFileToDrive(appTitle) {
   }
 }
 
-// Export to CSV
+// export to csv
 async function exportToCSV(data) {
-
-  const csvData = await convertJsonToCsv.json2csv(data, {
-    delimiter: {
-      wrap  : '`', // Double Quote (") character
-      field : '@@', // Comma field delimiter
-      eol   : '\n' // Newline delimiter
-    }
-  });
-
-  console.log(csvData)
-
-  fs.writeFile('data.csv', csvData, (err) => {
-    if (err) throw err;
-    console.log('CSV file saved!');
-  });
-  
-  // console.log(csvData)
-
-  console.log('\nconvert back to json')
-
-  let csv2jsonCallback = function (err, json) {
-    if (err) throw err;
-    console.log(typeof json);
-    console.log(json.length);
-    console.log(json);
-  }
-
-  await convertJsonToCsv.csv2json(csvData, csv2jsonCallback, {
-    delimiter: {
-      wrap  : '`', // Double Quote (") character
-      field : '@@', // Comma field delimiter
-      eol   : '\n' // Newline delimiter
-    }
-  })
-
-  return false
-
 
   // Function to check if an entry already exists based on 'apptitle'
   const findIndex = (array, key, value) => {
@@ -682,18 +643,20 @@ async function exportToCSV(data) {
     return -1;
   };
   
-  // Check if output CSV file already exists
+  // Check if data.csv already exists
   if (fs.existsSync('data.csv')) {
+
     // Read existing CSV data into memory
     const existingData = [];
+
     fs.createReadStream('data.csv')
       .pipe(csv())
       .on('data', (row) => {
         existingData.push(row);
       })
       .on('end', () => {
-  
-        // Update existing entries or add new ones
+
+        // Add new entries
         for (let i = 0; i < data.length; i++) {
           const index = findIndex(existingData, 'apptitle', data[i].apptitle);
           if (index !== -1) {
@@ -703,60 +666,28 @@ async function exportToCSV(data) {
           }
         }
 
-        // Write updated data to CSV file
-        const csvWriter = createCsvWriter({
-          path: 'data.csv',
-          header: [
-            { id: 'apptitle', title: 'apptitle' },
-            { id: 'images', title: 'images' },
-            { id: 'appdesc', title: 'appdesc' },
-            { id: 'comments', title: 'comments' },
-            { id: 'apkname', title: 'apkname' },
-            { id: 'gdriveId', title: 'gdriveId' },
-            { id: 'gdriveLink', title: 'gdriveLink' },
-          ]
-        });
+        // Save to data.csv
+        (async () => {
+          const res = await convertJsonToCsv.json2csv(existingData);
 
-        // Convert the data to a CSV string with escaped special characters
-        stringify(data, { header: true, delimiter: ';' }, (err, csvString) => {
-          if (err) {
-            console.error('Error converting data to CSV:', err);
-          } else {
-            // Write the CSV string to a file using createCsvWriter
-            csvWriter.writeRecords(csvString).then(() => {
-              console.log('CSV file created successfully!');
-            }).catch((err) => {
-              console.error('Error writing CSV file:', err);
-            });
-          }
-        });
+          fs.writeFile('data.csv', res, (err) => {
+            if (err) throw err;
+            console.log(`Total entries added to data.csv: ${existingData.length}`);
+          });
+
+        })();
 
       });
 
   } else {
-    // // Create new CSV file with provided data
-    // const csvWriter = createCsvWriter({
-    //   path: 'data.csv',
-    //   header: [
-    //     { id: 'apptitle', title: 'apptitle' },
-    //     { id: 'images', title: 'images' },
-    //     { id: 'appdesc', title: 'appdesc' },
-    //     { id: 'comments', title: 'comments' },
-    //     { id: 'apkname', title: 'apkname' },
-    //     { id: 'gdriveId', title: 'gdriveId' },
-    //     { id: 'gdriveLink', title: 'gdriveLink' },
-    //   ]
-    // });
+    // Create data.csv
+    const csvData = await convertJsonToCsv.json2csv(data);
 
-    // csvWriter.writeRecords(stringifier)
-    //   .then(() => {
-    //     console.log('CSV file created successfully!');
-    //   })
-    //   .catch((error) => {
-    //     console.error('Error creating CSV file:', error);
-    //   });
+    fs.writeFile('data.csv', csvData, (err) => {
+      if (err) throw err;
+      console.log('Created data.csv');
+    });
   }
-
 }
 
 (async () => {
@@ -836,12 +767,12 @@ async function exportToCSV(data) {
 
 
     const data = {
-      apptitle: 'Toca Kitchen',
+      apptitle: 'Toca Kitchenzzz',
       comments: [
         `My expirence was i liked it because the blender and you guys should upgrade the blend er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C;.`,
         `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you download this right now to hesitate bc it&#x27;s AWESOME!`
       ],
-      filesize: '61',
+      filesize: '70',
       apkname: 'com.tocaboca.tocakitchen',
       images: [
         `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
@@ -852,7 +783,6 @@ async function exportToCSV(data) {
       gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
     }
     
-
     await exportToCSV([data])
 
   } catch (err) {
