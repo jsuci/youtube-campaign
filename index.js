@@ -1,9 +1,8 @@
-require('dotenv').config()
+// require('dotenv').config()
 // const email = process.env.EMAIL
 // const password = process.env.PASSWORD
 
 const readline = require('readline');
-// const {executablePath} = require('puppeteer')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
@@ -13,7 +12,6 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const spawn = require('child_process').spawn
-const { Parser } = require('json2csv');
 const { randomBytes } = require('node:crypto');
 const archiver = require('archiver');
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
@@ -21,21 +19,13 @@ archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 const { google } = require('googleapis');
 const { readFile } = require('fs').promises;
 const cliProgress = require('cli-progress');
-const { OAuth2Client } = require('google-auth-library');
 
+const convertJsonToCsv = require('json-2-csv');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-const csvParser = require('csv-parser');
+const csv = require('csv-parser');
+const { stringify } = require('csv-stringify');
 const he = require('he');
 
-const knex = require('knex')({
-  client: 'pg',
-  connection: {
-    host: 'localhost',
-    user: 'postgres',
-    password: 'postgres',
-    database: 'ytcampaign',
-  },
-});
 
 // getting data
 async function getUserInput(question) {
@@ -77,31 +67,10 @@ async function checkEnv() {
     });
   });
 
-  const client_id = await new Promise((resolve) => {
-    rl.question('Enter your client_id: ', (answer) => {
-      resolve(answer);
-    });
-  });
-
-  const client_secret = await new Promise((resolve) => {
-    rl.question('Enter your client_secret: ', (answer) => {
-      resolve(answer);
-    });
-  });
-
   rl.close();
 
   // Write email and password to .env file
-  const data = {
-    email: email,
-    password: password,
-    client_id: client_id,
-    client_secret: client_secret
-  }
-  const envString = Object.entries(data)
-  .map(([key, value]) => `${key}='${value}'`)
-  .join('\n');
-
+  const envString = `EMAIL='${email}'\nPASSWORD='${password}'\n`;
   fs.writeFileSync('.env', envString);
 
   // Load environment variables from .env file
@@ -222,57 +191,7 @@ async function getComments(page) {
 
 }
 
-// store data to postgres
-async function insertData(data) {
-  
-  // Check if the appTitle already exists in the database
-  knex('apps')
-    .select('apptitle')
-    .where('apptitle', data['apptitle'])
-    .then(rows => {
-      if (rows.length === 0) {
-        // If the appTitle doesn't exist, insert a new row
-        return knex('apps')
-        .insert(data)
-        .then(() => console.log('Data inserted into database'))
-        .catch((error) => console.error(error));
-      }
-    })
-    .finally(() => {
-      knex.destroy();
-    });
-  
-}
 
-async function viewData() {
-  knex('apps')
-  .select()
-  .then(rows => {
-    console.log(`Total app entries: ${rows.length}`);
-  })
-  .finally(() => {
-    knex.destroy();
-  });
-}
-
-async function exportData() {
-  knex.select('*')
-  .from('apps')
-  .then(rows => {
-    const json2csvParser = new Parser({ header: true });
-    let csvData = '';
-    if (rows.length > 0) {
-      csvData = json2csvParser.parse(rows);
-    }
-
-    fs.writeFile('data.csv', csvData, (err) => {
-      if (err) throw err;
-      console.log('Data exported to CSV file successfully');
-    });
-  })
-  .catch(err => console.log(err))
-  .finally(() => knex.destroy());
-}
 
 // creating files
 async function downloadFile(url, path) {
@@ -592,7 +511,7 @@ async function createZipFile(appTitle) {
   })
 }
 
-// Upload to GDRIVE
+// upload to gdrive
 async function uploadFileToDrive(appTitle) {
   try {
 
@@ -600,12 +519,11 @@ async function uploadFileToDrive(appTitle) {
     let credentials
 
     try {
-      credentials = await readFile('credentials-sa.json');
+      credentials = await readFile('credentials.json');
     } catch (error) {
       console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
       process.exit(1);
     }
-
     // Authenticate with the Google Drive API using a service account
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(credentials),
@@ -714,71 +632,78 @@ async function uploadFileToDrive(appTitle) {
   }
 }
 
-// Upload to Youtube
-async function uploadToYoutube() {
-
-  const CLIENT_ID = 'your_client_id';
-  const CLIENT_SECRET = 'your_client_secret';
-  const REDIRECT_URI = 'your_redirect_uri';
-  
-
-  // Authenticate with OAuth 2.0
-  const auth = await authenticate({
-    keyfilePath: 'credentials.json',
-    scopes: [
-      'https://www.googleapis.com/auth/youtube',
-      'https://www.googleapis.com/auth/youtube.upload'
-    ]
-  });
-
-  // Create a YouTube client with the authenticated credentials
-  const youtube = google.youtube({version: 'v3', auth});
-
-  youtube.channels.list({
-    part: 'snippet',
-    mine: true,
-  }, (err, res) => {
-    if (err) {
-      console.error(err);
-    } else {
-      console.log(res.data);
-    }
-  });
-}
-
 // Export to CSV
-async function exportToCSV(dataJson) {
+async function exportToCSV(data) {
 
-  let existingData = [];
-  fs.access('data.csv', fs.constants.F_OK, (err) => {
-    if (err) {
-      fs.writeFileSync('data.csv', 'utf8');
+  const csvData = await convertJsonToCsv.json2csv(data, {
+    delimiter: {
+      wrap  : '`', // Double Quote (") character
+      field : '@@', // Comma field delimiter
+      eol   : '\n' // Newline delimiter
     }
+  });
+
+  console.log(csvData)
+
+  fs.writeFile('data.csv', csvData, (err) => {
+    if (err) throw err;
+    console.log('CSV file saved!');
+  });
+  
+  // console.log(csvData)
+
+  console.log('\nconvert back to json')
+
+  let csv2jsonCallback = function (err, json) {
+    if (err) throw err;
+    console.log(typeof json);
+    console.log(json.length);
+    console.log(json);
+  }
+
+  await convertJsonToCsv.csv2json(csvData, csv2jsonCallback, {
+    delimiter: {
+      wrap  : '`', // Double Quote (") character
+      field : '@@', // Comma field delimiter
+      eol   : '\n' // Newline delimiter
+    }
+  })
+
+  return false
+
+
+  // Function to check if an entry already exists based on 'apptitle'
+  const findIndex = (array, key, value) => {
+    for (let i = 0; i < array.length; i++) {
+      if (array[i][key] === value) {
+        return i;
+      }
+    }
+    return -1;
+  };
+  
+  // Check if output CSV file already exists
+  if (fs.existsSync('data.csv')) {
+    // Read existing CSV data into memory
+    const existingData = [];
     fs.createReadStream('data.csv')
-      .pipe(csvParser({
-        skipLines: 1,
-        headers: ['apptitle','images','appdesc','comments','apkname','filesize', 'gdriveId','gdriveLink'],
-      }))
-      .on('data', data => {
-        existingData.push(data);
+      .pipe(csv())
+      .on('data', (row) => {
+        existingData.push(row);
       })
       .on('end', () => {
-        console.log(`Reading ${existingData.length} entries from file`);
-
-        // Check if the data already exists in the existing data
-        const existingDataIndex = existingData.findIndex(e => e.apptitle === dataJson[0]['apptitle']);
-
-        // If the data exists, replace it with the new data
-        if (existingDataIndex !== -1) {
-          existingData[existingDataIndex] = dataJson[0];
-        }
-        else {
-          existingData.push(dataJson[0]);
+  
+        // Update existing entries or add new ones
+        for (let i = 0; i < data.length; i++) {
+          const index = findIndex(existingData, 'apptitle', data[i].apptitle);
+          if (index !== -1) {
+            existingData[index] = data[i];
+          } else {
+            existingData.push(data[i]);
+          }
         }
 
-        console.log(existingData)
-
-        // Save updated results to CSV file
+        // Write updated data to CSV file
         const csvWriter = createCsvWriter({
           path: 'data.csv',
           header: [
@@ -787,21 +712,52 @@ async function exportToCSV(dataJson) {
             { id: 'appdesc', title: 'appdesc' },
             { id: 'comments', title: 'comments' },
             { id: 'apkname', title: 'apkname' },
-            { id: 'filesize', title: 'filesize' },
-            { id: 'gdriveid', title: 'gdriveid' },
-            { id: 'gdrivesrc', title: 'gdrivesrc' }
-          ],
+            { id: 'gdriveId', title: 'gdriveId' },
+            { id: 'gdriveLink', title: 'gdriveLink' },
+          ]
         });
 
-        csvWriter.writeRecords(existingData).then(() => {
-          console.log('CSV file updated!');
+        // Convert the data to a CSV string with escaped special characters
+        stringify(data, { header: true, delimiter: ';' }, (err, csvString) => {
+          if (err) {
+            console.error('Error converting data to CSV:', err);
+          } else {
+            // Write the CSV string to a file using createCsvWriter
+            csvWriter.writeRecords(csvString).then(() => {
+              console.log('CSV file created successfully!');
+            }).catch((err) => {
+              console.error('Error writing CSV file:', err);
+            });
+          }
         });
 
       });
-  });
+
+  } else {
+    // // Create new CSV file with provided data
+    // const csvWriter = createCsvWriter({
+    //   path: 'data.csv',
+    //   header: [
+    //     { id: 'apptitle', title: 'apptitle' },
+    //     { id: 'images', title: 'images' },
+    //     { id: 'appdesc', title: 'appdesc' },
+    //     { id: 'comments', title: 'comments' },
+    //     { id: 'apkname', title: 'apkname' },
+    //     { id: 'gdriveId', title: 'gdriveId' },
+    //     { id: 'gdriveLink', title: 'gdriveLink' },
+    //   ]
+    // });
+
+    // csvWriter.writeRecords(stringifier)
+    //   .then(() => {
+    //     console.log('CSV file created successfully!');
+    //   })
+    //   .catch((error) => {
+    //     console.error('Error creating CSV file:', error);
+    //   });
+  }
 
 }
-
 
 (async () => {
 
@@ -867,22 +823,37 @@ async function exportToCSV(dataJson) {
 
     // await browser.close();
 
-    // await downloadAppImages(imageList, appTitle);
-    // await overlayImages(appTitle);
-    // await createVideoFromImages(appTitle);
-    // await concatVideos(appTitle);
-    // await createDummyFile(appTitle, data);
-    // await createZipFile(appTitle);
+    // // await downloadAppImages(imageList, appTitle);
+    // // await overlayImages(appTitle);
+    // // await createVideoFromImages(appTitle);
+    // // await concatVideos(appTitle);
+    // // await createDummyFile(appTitle, data);
+    // // await createZipFile(appTitle);
+    // const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
 
-    // const gDrive = await uploadFileToDrive(appTitle);
     // data['gdriveId'] = gDrive.fileId
     // data['gdriveLink'] = gDrive.gdrive
 
-    // await exportToCSV([data])
 
-    // await uploadToYoutube()
+    const data = {
+      apptitle: 'Toca Kitchen',
+      comments: [
+        `My expirence was i liked it because the blender and you guys should upgrade the blend er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C;.`,
+        `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you download this right now to hesitate bc it&#x27;s AWESOME!`
+      ],
+      filesize: '61',
+      apkname: 'com.tocaboca.tocakitchen',
+      images: [
+        `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
+        `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5uilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
+      ],
+      appdesc: `Do you want to be the head chef of your very own sushi restaurant? Check out Toca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Gold!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food?`,
+      gdriveId: '1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF',
+      gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
+    }
+    
 
-    await checkEnv()
+    await exportToCSV([data])
 
   } catch (err) {
     console.error('Error:', err);

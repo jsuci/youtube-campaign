@@ -17,9 +17,11 @@
   },
   "homepage": "https://github.com/jsuci/youtube-campaign#readme",
   "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
     "archiver-zip-encrypted": "^1.0.11",
     "cli-progress": "^3.12.0",
     "csv-parser": "^3.0.0",
+    "csv-stringify": "^6.3.2",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.0.3",
     "google-auth-library": "^8.7.0",
@@ -31,6 +33,7 @@
     "puppeteer-extra": "^3.3.4",
     "puppeteer-extra-plugin-session": "^1.0.1",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
-    "sharp": "^0.31.3"
+    "sharp": "^0.31.3",
+    "util": "^0.12.5"
   }
 }
