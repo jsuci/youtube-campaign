@@ -6,6 +6,7 @@ const readline = require('readline');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
+const {executablePath} = require('puppeteer')
 
 const https = require('https');
 const fs = require('fs');
@@ -694,94 +695,94 @@ async function exportToCSV(data) {
 
   try {
 
-    // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    // const data = {}
-    // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-    // const browser = await puppeteer.launch({
-    //   headless: false,
-    //   args: [
-    //     `--window-size=375,667`,
-    //   ],
-    //   slowMo: 350,
-    //   devtools: false,
-    //   executablePath: executablePath(),
-    //   userDataDir: "./user_data"
-    // });
+    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    const data = {}
+    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    const browser = await puppeteer.launch({
+      headless: false,
+      args: [
+        `--window-size=375,667`,
+      ],
+      slowMo: 350,
+      devtools: false,
+      executablePath: executablePath(),
+      userDataDir: "./user_data"
+    });
 
-    // const page = await browser.newPage();
+    const page = await browser.newPage();
 
     // console.log(`Testing the stealth plugin..`)
     // await page.goto('https://bot.sannysoft.com')
     // await page.waitForTimeout(5000)
     // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-    // await page.goto(url);
-    // console.log(`Opening page: ${url}\n`);
+    await page.goto(url);
+    console.log(`Opening page: ${url}\n`);
 
-    // await checkLogin(page, url)
+    await checkLogin(page, url)
 
-    // const appTitle = await getTitle(page)
-    // data['apptitle'] = appTitle
-    // console.log(`Extracted title: ${appTitle}`);
+    const appTitle = await getTitle(page)
+    data['apptitle'] = appTitle
+    console.log(`Extracted title: ${appTitle}`);
 
-    // const comments = await getComments(page)
-    // data['comments'] = comments
-    // console.log(`Extracted comments: ${comments.length}`);
+    const comments = await getComments(page)
+    data['comments'] = comments
+    console.log(`Extracted comments: ${comments.length}`);
 
-    // const fileSize = await getFileSize(page)
-    // data['filesize'] = fileSize
-    // console.log(`Extracted file size: ${fileSize}`);
+    const fileSize = await getFileSize(page)
+    data['filesize'] = fileSize
+    console.log(`Extracted file size: ${fileSize}`);
 
-    // const apkName = searchTerm.trim()
-    // data['apkname'] = apkName
-    // console.log(`Extracted apkName: ${apkName}`);
+    const apkName = searchTerm.trim()
+    data['apkname'] = apkName
+    console.log(`Extracted apkName: ${apkName}`);
 
-    // let imageList = []
-    // const thumbURL = await getThumbnail(page)
-    // imageList.push(thumbURL)
-    // console.log(`Extracted thumbnail: ${imageList.length}`);
+    let imageList = []
+    const thumbURL = await getThumbnail(page)
+    imageList.push(thumbURL)
+    console.log(`Extracted thumbnail: ${imageList.length}`);
 
-    // const appImages = await getAppImages(page)
-    // imageList = imageList.concat(appImages)
-    // data['images'] = imageList
-    // console.log(`Extracted appImages: ${appImages.length}`);
+    const appImages = await getAppImages(page)
+    imageList = imageList.concat(appImages)
+    data['images'] = imageList
+    console.log(`Extracted appImages: ${appImages.length}`);
 
-    // const description = await getDescription(page)
-    // data['appdesc'] = description
-    // console.log(`Extracted description: ${description.length}`);
+    const description = await getDescription(page)
+    data['appdesc'] = description
+    console.log(`Extracted description: ${description.length}`);
 
-    // console.log('Done extracting data. Closing browser.\n')
+    console.log('Done extracting data. Closing browser.\n')
 
-    // await browser.close();
+    await browser.close();
 
-    // // await downloadAppImages(imageList, appTitle);
-    // // await overlayImages(appTitle);
-    // // await createVideoFromImages(appTitle);
-    // // await concatVideos(appTitle);
-    // // await createDummyFile(appTitle, data);
-    // // await createZipFile(appTitle);
-    // const gDrive = await uploadFileToDrive('Hello Kitty Lunchbox');
+    await downloadAppImages(imageList, appTitle);
+    await overlayImages(appTitle);
+    await createVideoFromImages(appTitle);
+    await concatVideos(appTitle);
+    await createDummyFile(appTitle, data);
+    await createZipFile(appTitle);
 
-    // data['gdriveId'] = gDrive.fileId
-    // data['gdriveLink'] = gDrive.gdrive
+    const gDrive = await uploadFileToDrive(appTitle);
+    data['gdriveId'] = gDrive.fileId
+    data['gdriveLink'] = gDrive.gdrive
 
 
-    const data = {
-      apptitle: 'Toca Kitchenzzz',
-      comments: [
-        `My expirence was i liked it because the blender and you guys should upgrade the blend er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C;.`,
-        `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you download this right now to hesitate bc it&#x27;s AWESOME!`
-      ],
-      filesize: '70',
-      apkname: 'com.tocaboca.tocakitchen',
-      images: [
-        `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
-        `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5uilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
-      ],
-      appdesc: `Do you want to be the head chef of your very own sushi restaurant? Check out Toca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Gold!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food?`,
-      gdriveId: '1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF',
-      gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
-    }
+    // const data = {
+    //   apptitle: 'Toca Kitchenzzz',
+    //   comments: [
+    //     `My expirence was i liked it because the blender and you guys should upgrade the blend er. Make the pitcher a little bit taller and make it a bit thinner because it kinda looks weird and that is all i have to say. Thanks for tour game, your games are the BEST&#x1F44C;.`,
+    //     `Awesome! IT should be for 3-15 bc its a really fun game! It&#x27;s offline and I love it! I wish more of the apps are free but it&#x27;s not! But I do recommend that you download this right now to hesitate bc it&#x27;s AWESOME!`
+    //   ],
+    //   filesize: '70',
+    //   apkname: 'com.tocaboca.tocakitchen',
+    //   images: [
+    //     `https://play-lh.googleusercontent.com/nhPQcLEUtGcNYdBc1_FVzZT-Oi9qhzEf6O92gn5w8gv03Xb4Qr1GeN-LZ5hMggFZ2Q=s512-rw`,
+    //     `https://play-lh.googleusercontent.com/8QpVRB9O8eDHUewMYgBXm3-s6A2MiGbCIexG3pPnyeqvC5uilWxhvmkK0193W9p9xPQj=w2560-h1440-rw`
+    //   ],
+    //   appdesc: `Do you want to be the head chef of your very own sushi restaurant? Check out Toca Kitchen Sushi, the newest app from Toca Boca &#x1F449; http://bit.ly/TocaKitchenSushi_GooglePlay&#x3C;br&#x3E;&#x3C;br&#x3E;*Parents Choice Awards &#x2013; Toca Kitchen Wins Gold!* &#x3C;br&#x3E;&#x3C;br&#x3E;Ever wanted to play with your food?`,
+    //   gdriveId: '1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF',
+    //   gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
+    // }
     
     await exportToCSV([data])
 
