@@ -631,6 +631,116 @@ async function uploadFileToDrive(appTitle) {
   }
 }
 
+// upload to youtube
+async function uploadVideoToYouTube(appTitle, privacyStatus = 'public') {
+  try {
+
+    // Read the contents of the credentials file
+    let credentials
+
+    try {
+      credentials = await readFile('credentials.json');
+    } catch (error) {
+      console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
+      process.exit(1);
+    }
+    
+    // Authenticate with the YouTube API using a service account
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(credentials),
+      scopes: ['https://www.googleapis.com/auth/youtube.upload'],
+    });
+    const youtube = google.youtube({ version: 'v3', auth });
+
+    // Get the ID of the "uploads" playlist for the authenticated user
+    const channelsResponse = await youtube.channels.list({
+      mine: true,
+      part: 'contentDetails'
+    });
+
+    const playlistId = channelsResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
+
+    // Upload video file to YouTube
+    const fileName = `${appTitle} Full Version Unlocked`
+    const filePath = path.join('apps', appTitle, 'file', fileName + '.mp4')
+    const fileSize = fs.statSync(filePath).size;
+
+    const progressBar = new cliProgress.SingleBar({
+      format: `Progress | {bar} | {percentage}% | ETA: {eta}s`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true
+    });
+
+    console.log(`\nUploading ${fileName}`);
+    progressBar.start(fileSize, 0);
+
+    const res = await youtube.videos.insert({
+      part: 'snippet,status',
+      notifySubscribers: false,
+      requestBody: {
+        snippet: {
+          title: fileName,
+          description: 'Download link: ' + gdrive,
+          tags: ['app', 'download', 'unlocked', 'premium'],
+          categoryId: '22'
+        },
+        status: {
+          privacyStatus: privacyStatus
+        }
+      },
+      media: {
+        body: fs.createReadStream(filePath),
+      }
+    }, {
+      onUploadProgress: (evt) => {
+        if (evt) {
+          progressBar.update(evt.bytesRead);
+          if (evt.bytesRead === fileSize) {
+            progressBar.stop();
+          }
+        }
+      }
+    });
+
+    const videoId = res.data.id
+    console.log(`\nVideo upload done with video ID: ${videoId}`);
+
+    // Add the uploaded video to the "uploads" playlist
+    const playlistItemRes = await youtube.playlistItems.insert({
+      part: 'snippet',
+      requestBody: {
+        snippet: {
+          playlistId: playlistId,
+          resourceId: {
+            kind: 'youtube#video',
+            videoId: videoId,
+          }
+        }
+      }
+    });
+
+    console.log(`\nVideo added to the "uploads" playlist with ID: ${playlistItemRes.data.id}`);
+
+    // Get the video's shareable link
+    const linkRes = await youtube.videos.list({
+      part: 'snippet',
+      id: videoId,
+      fields: 'items(snippet(publishedAt))'
+    });
+
+    const publishedAt = linkRes.data.items[0].snippet.publishedAt;
+    const shareableLink = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log(`\nShareable link: ${shareableLink} (published at ${publishedAt})`);
+
+    return shareableLink;
+
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+
 // export to csv
 async function exportToCSV(data) {
 
