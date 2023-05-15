@@ -22,15 +22,17 @@
     "cli-progress": "^3.12.0",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.0.3",
-    "google-auth-library": "^8.7.0",
+    "google-auth-library": "^8.8.0",
     "googleapis": "^105.0.0",
     "he": "^1.2.0",
     "json-2-csv": "^4.0.0",
+    "open": "^9.1.0",
     "pg": "^8.9.0",
     "puppeteer": "^19.7.2",
     "puppeteer-extra": "^3.3.4",
     "puppeteer-extra-plugin-session": "^1.0.1",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
+    "server-destroy": "^1.0.1",
     "sharp": "^0.31.3",
     "util": "^0.12.5"
   }

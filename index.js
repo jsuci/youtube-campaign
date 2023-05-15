@@ -41,7 +41,7 @@ async function getUserInput(question) {
   });
 }
 
-async function checkEnv() {
+async function loadEnv() {
   // Check if .env file exists
   if (fs.existsSync('.env')) {
     require('dotenv').config();
@@ -632,112 +632,112 @@ async function uploadFileToDrive(appTitle) {
 }
 
 // upload to youtube
-async function uploadVideoToYouTube(appTitle, privacyStatus = 'public') {
-  try {
+async function uploadToYoutube() {
 
-    // Read the contents of the credentials file
-    let credentials
+  // Download your OAuth2 configuration from Google
+  const keys = require('./credentials.json');
 
-    try {
-      credentials = await readFile('credentials.json');
-    } catch (error) {
-      console.error('\nCould not find credentials file. Check the guide on how to create one.\n');
-      process.exit(1);
-    }
-    
-    // Authenticate with the YouTube API using a service account
-    const auth = new google.auth.GoogleAuth({
-      credentials: JSON.parse(credentials),
-      scopes: ['https://www.googleapis.com/auth/youtube.upload'],
-    });
-    const youtube = google.youtube({ version: 'v3', auth });
+  const oAuth2Client = await getAuthenticatedClient();
+  // Make a simple request to the People API using our pre-authenticated client. The `request()` method
+  // takes a GaxiosOptions object. Visit https://github.com/JustinBeckwith/gaxios.
+  // const url = 'https://www.googleapis.com/auth/youtube';
+  // const res = await oAuth2Client.request({url});
+  // console.log('res', res.data, oAuth2Client);
 
-    // Get the ID of the "uploads" playlist for the authenticated user
-    const channelsResponse = await youtube.channels.list({
+
+    // Create a YouTube client with the authenticated credentials
+    const youtube = google.youtube({version: 'v3'});
+
+    youtube.channels.list({
+      part: 'snippet,contentDetails,statistics',
       mine: true,
-      part: 'contentDetails'
-    });
-
-    const playlistId = channelsResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
-
-    // Upload video file to YouTube
-    const fileName = `${appTitle} Full Version Unlocked`
-    const filePath = path.join('apps', appTitle, 'file', fileName + '.mp4')
-    const fileSize = fs.statSync(filePath).size;
-
-    const progressBar = new cliProgress.SingleBar({
-      format: `Progress | {bar} | {percentage}% | ETA: {eta}s`,
-      barCompleteChar: '\u2588',
-      barIncompleteChar: '\u2591',
-      hideCursor: true
-    });
-
-    console.log(`\nUploading ${fileName}`);
-    progressBar.start(fileSize, 0);
-
-    const res = await youtube.videos.insert({
-      part: 'snippet,status',
-      notifySubscribers: false,
-      requestBody: {
-        snippet: {
-          title: fileName,
-          description: 'Download link: ' + gdrive,
-          tags: ['app', 'download', 'unlocked', 'premium'],
-          categoryId: '22'
-        },
-        status: {
-          privacyStatus: privacyStatus
+      auth: oAuth2Client
+    }, (err, res) => {
+      if (err) {
+        console.error(err);
+      } else {
+        console.log(res.data);
+        var channels = res.data.items;
+        if (channels.length == 0) {
+          console.log('No channel found.');
+        } else {
+          console.log('This channel\'s ID is %s. Its title is \'%s\', and ' +
+                      'it has %s views.',
+                      channels[0].id,
+                      channels[0].snippet.title,
+                      channels[0].statistics.viewCount);
         }
-      },
-      media: {
-        body: fs.createReadStream(filePath),
       }
-    }, {
-      onUploadProgress: (evt) => {
-        if (evt) {
-          progressBar.update(evt.bytesRead);
-          if (evt.bytesRead === fileSize) {
-            progressBar.stop();
+    });
+
+  // After acquiring an access_token, you may want to check on the audience, expiration,
+  // or original scopes requested. You can do that with the `getTokenInfo` method.
+  // const tokenInfo = await oAuth2Client.getTokenInfo(
+  //   oAuth2Client.credentials.access_token
+  // );
+  // console.log('tokeninfo', tokenInfo);
+
+  /**
+  * Create a new OAuth2Client and go through the OAuth2 content
+  * workflow. Return the full client to the callback.
+  */
+  async function getAuthenticatedClient() {
+    const { OAuth2Client } = await import('google-auth-library');
+    const http = await import('http');
+    const url = await import('url');
+    const open = await import('open');
+    const destroyer = await import('server-destroy');
+
+    return new Promise((resolve, reject) => {
+      // Create an OAuth client to authorize the API call. Secrets are kept in a `keys.json` file,
+      // which should be downloaded from the Google Developers Console.
+      const oAuth2Client = new OAuth2Client(
+        keys.web.client_id,
+        keys.web.client_secret,
+        keys.web.redirect_uris[0]
+      );
+
+      // Generate the URL that will be used for the consent dialog.
+      const authorizeUrl = oAuth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: [
+          'https://www.googleapis.com/auth/youtube',
+          'https://www.googleapis.com/auth/youtube.upload'
+        ],
+        prompt: 'consent'
+      });
+
+      // Open an HTTP server to accept the OAuth callback. In this simple example, the
+      // only request to our web server is to /oauth2callback?code=<code>
+      const server = http.createServer(async (req, res) => {
+        try {
+          if (req.url.indexOf('/oauth2callback') > -1) {
+            // Acquire the code from the query string and close the web server.
+            const qs = new url.URL(req.url, 'http://localhost:3000').searchParams;
+            const code = qs.get('code');
+            console.log(`Code is ${code}`);
+            res.end('Authentication successful! Please return to the console.');
+            server.destroy();
+
+            // Now that we have the code, use it to acquire tokens.
+            const r = await oAuth2Client.getToken(code);
+            // Make sure to set the credentials on the OAuth2 client.
+            oAuth2Client.setCredentials(r.tokens);
+            console.info('Tokens acquired.');
+            resolve(oAuth2Client);
           }
+        } catch (e) {
+          reject(e);
         }
-      }
+      }).listen(3000, () => {
+        console.log('Server is running on http://localhost:3000');
+        // Open the browser to the authorize URL to start the workflow
+        open.default(authorizeUrl, { wait: false }).then(cp => cp.unref());
+      });
+      destroyer.default(server);
     });
-
-    const videoId = res.data.id
-    console.log(`\nVideo upload done with video ID: ${videoId}`);
-
-    // Add the uploaded video to the "uploads" playlist
-    const playlistItemRes = await youtube.playlistItems.insert({
-      part: 'snippet',
-      requestBody: {
-        snippet: {
-          playlistId: playlistId,
-          resourceId: {
-            kind: 'youtube#video',
-            videoId: videoId,
-          }
-        }
-      }
-    });
-
-    console.log(`\nVideo added to the "uploads" playlist with ID: ${playlistItemRes.data.id}`);
-
-    // Get the video's shareable link
-    const linkRes = await youtube.videos.list({
-      part: 'snippet',
-      id: videoId,
-      fields: 'items(snippet(publishedAt))'
-    });
-
-    const publishedAt = linkRes.data.items[0].snippet.publishedAt;
-    const shareableLink = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log(`\nShareable link: ${shareableLink} (published at ${publishedAt})`);
-
-    return shareableLink;
-
-  } catch (error) {
-    console.error(error);
   }
+
 }
 
 
@@ -805,76 +805,76 @@ async function exportToCSV(data) {
 
   try {
 
-    const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
-    const data = {}
-    const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
-    const browser = await puppeteer.launch({
-      headless: false,
-      args: [
-        `--window-size=375,667`,
-      ],
-      slowMo: 350,
-      devtools: false,
-      executablePath: executablePath(),
-      userDataDir: "./user_data"
-    });
+    // const searchTerm = await getUserInput('Enter app name (ex. com.microsoft.office.excel): ');
+    // const data = {}
+    // const url = `https://play.google.com/store/apps/details?id=${encodeURIComponent(searchTerm.trim())}`;
+    // const browser = await puppeteer.launch({
+    //   headless: false,
+    //   args: [
+    //     `--window-size=375,667`,
+    //   ],
+    //   slowMo: 350,
+    //   devtools: false,
+    //   executablePath: executablePath(),
+    //   userDataDir: "./user_data"
+    // });
 
-    const page = await browser.newPage();
+    // const page = await browser.newPage();
 
     // console.log(`Testing the stealth plugin..`)
     // await page.goto('https://bot.sannysoft.com')
     // await page.waitForTimeout(5000)
     // await page.screenshot({ path: 'stealth.png', fullPage: true })
 
-    await page.goto(url);
-    console.log(`Opening page: ${url}\n`);
+    // await page.goto(url);
+    // console.log(`Opening page: ${url}\n`);
 
-    await checkLogin(page, url)
+    // await checkLogin(page, url)
 
-    const appTitle = await getTitle(page)
-    data['apptitle'] = appTitle
-    console.log(`Extracted title: ${appTitle}`);
+    // const appTitle = await getTitle(page)
+    // data['apptitle'] = appTitle
+    // console.log(`Extracted title: ${appTitle}`);
 
-    const comments = await getComments(page)
-    data['comments'] = comments
-    console.log(`Extracted comments: ${comments.length}`);
+    // const comments = await getComments(page)
+    // data['comments'] = comments
+    // console.log(`Extracted comments: ${comments.length}`);
 
-    const fileSize = await getFileSize(page)
-    data['filesize'] = fileSize
-    console.log(`Extracted file size: ${fileSize}`);
+    // const fileSize = await getFileSize(page)
+    // data['filesize'] = fileSize
+    // console.log(`Extracted file size: ${fileSize}`);
 
-    const apkName = searchTerm.trim()
-    data['apkname'] = apkName
-    console.log(`Extracted apkName: ${apkName}`);
+    // const apkName = searchTerm.trim()
+    // data['apkname'] = apkName
+    // console.log(`Extracted apkName: ${apkName}`);
 
-    let imageList = []
-    const thumbURL = await getThumbnail(page)
-    imageList.push(thumbURL)
-    console.log(`Extracted thumbnail: ${imageList.length}`);
+    // let imageList = []
+    // const thumbURL = await getThumbnail(page)
+    // imageList.push(thumbURL)
+    // console.log(`Extracted thumbnail: ${imageList.length}`);
 
-    const appImages = await getAppImages(page)
-    imageList = imageList.concat(appImages)
-    data['images'] = imageList
-    console.log(`Extracted appImages: ${appImages.length}`);
+    // const appImages = await getAppImages(page)
+    // imageList = imageList.concat(appImages)
+    // data['images'] = imageList
+    // console.log(`Extracted appImages: ${appImages.length}`);
 
-    const description = await getDescription(page)
-    data['appdesc'] = description
-    console.log(`Extracted description: ${description.length}`);
+    // const description = await getDescription(page)
+    // data['appdesc'] = description
+    // console.log(`Extracted description: ${description.length}`);
 
-    console.log('Done extracting data. Closing browser.\n')
+    // console.log('Done extracting data. Closing browser.\n')
 
-    await browser.close();
+    // await browser.close();
 
-    await downloadAppImages(imageList, appTitle);
-    await overlayImages(appTitle);
-    await createVideoFromImages(appTitle);
-    await concatVideos(appTitle);
-    await createDummyFile(appTitle, data);
-    await createZipFile(appTitle);
+    // await downloadAppImages(imageList, appTitle);
+    // await overlayImages(appTitle);
+    // await createVideoFromImages(appTitle);
+    // await concatVideos(appTitle);
+    // await createDummyFile(appTitle, data);
+    // await createZipFile(appTitle);
 
-    const gDrive = await uploadFileToDrive(appTitle);
-    data['gdriveId'] = gDrive.fileId
-    data['gdriveLink'] = gDrive.gdrive
+    // const gDrive = await uploadFileToDrive(appTitle);
+    // data['gdriveId'] = gDrive.fileId
+    // data['gdriveLink'] = gDrive.gdrive
 
 
     // const data = {
@@ -894,7 +894,9 @@ async function exportToCSV(data) {
     //   gdriveLink: `https://drive.google.com/file/d/1NfQ3dEW_IOJQ6Fi_617iD9sSfm9QBjDF/view?usp=drivesdk`
     // }
     
-    await exportToCSV([data])
+    // await exportToCSV([data])
+
+    await uploadToYoutube()
 
   } catch (err) {
     console.error('Error:', err);
