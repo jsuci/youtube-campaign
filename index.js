@@ -632,7 +632,7 @@ async function uploadFileToDrive(appTitle) {
 }
 
 // upload to youtube
-async function uploadToYoutube() {
+async function uploadToYoutube(appTitle) {
 
   const oAuth2Client = await getAuthenticatedClient();
   // Make a simple request to the People API using our pre-authenticated client. The `request()` method
@@ -642,26 +642,145 @@ async function uploadToYoutube() {
   // console.log('res', res.data, oAuth2Client);
 
 
-    // Create a YouTube client with the authenticated credentials
-    const youtube = google.youtube({version: 'v3'});
+  // Create a YouTube client with the authenticated credentials
+  const youtube = google.youtube({version: 'v3', auth: oAuth2Client});
 
-    youtube.channels.list({
-      part: 'snippet,contentDetails,statistics',
-      mine: true,
-      auth: oAuth2Client
-    }, (err, res) => {
-      if (err) {
-        console.error(err);
-      } else {
-        console.log(res.data);
-        var channels = res.data.items;
-        if (channels.length == 0) {
-          console.log('No channel found.');
-        } else {
-          console.log(`This channel's ID is ${channels[0].id}. Its title is ${channels[0].snippet.title}, and it has ${channels[0].statistics.viewCount} views.`);
+
+  // Get the ID of the "uploads" playlist for the authenticated user
+  const channelsResponse = await youtube.channels.list({
+    mine: true,
+    part: 'contentDetails'
+  });
+
+  const playlistId = channelsResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
+
+  // Upload video file to YouTube
+  const videoTitle = `${appTitle} Full Version Unlocked Premium Download Free`
+  const filePath = path.join('apps', appTitle, 'output' + '.mp4')
+  const fileSize = fs.statSync(filePath).size;
+
+  const progressBar = new cliProgress.SingleBar({
+    format: `Progress | {bar} | {percentage}% | ETA: {eta}s`,
+    barCompleteChar: '\u2588',
+    barIncompleteChar: '\u2591',
+    hideCursor: true
+  });
+
+  console.log(`\nUploading ${filePath}`);
+  progressBar.start(fileSize, 0);
+
+  const res = await youtube.videos.insert({
+    part: 'snippet,status',
+    notifySubscribers: false,
+    requestBody: {
+      snippet: {
+        title: videoTitle,
+        description: `Download ${videoTitle} for free. Check the download link in the pinned comment section.`,
+        tags: ['app', 'download', 'unlocked', 'premium', videoTitle],
+        categoryId: '22'
+      },
+      status: {
+        privacyStatus: 'public'
+      }
+    },
+    media: {
+      body: fs.createReadStream(filePath),
+    }
+  }, {
+    onUploadProgress: (evt) => {
+      if (evt) {
+        progressBar.update(evt.bytesRead);
+        if (evt.bytesRead === fileSize) {
+          progressBar.stop();
         }
       }
-    });
+    }
+  });
+
+
+  const videoId = res.data.id
+  console.log(`\nVideo upload done with video ID: ${videoId}`);
+
+  // // Add the uploaded video to the "uploads" playlist
+  // const playlistItemRes = await youtube.playlistItems.insert({
+  //   part: 'snippet',
+  //   requestBody: {
+  //     snippet: {
+  //       playlistId: playlistId,
+  //       resourceId: {
+  //         kind: 'youtube#video',
+  //         videoId: videoId,
+  //       }
+  //     }
+  //   }
+  // });
+
+  // console.log(`\nVideo added to the "uploads" playlist with ID: ${playlistItemRes.data.id}`);
+
+  // Get the video's shareable link
+  const linkRes = await youtube.videos.list({
+    part: 'snippet',
+    id: videoId,
+    fields: 'items(snippet(publishedAt))'
+  });
+
+  const publishedAt = linkRes.data.items[0].snippet.publishedAt;
+  const shareableLink = `https://www.youtube.com/watch?v=${videoId}`;
+  console.log(`\nShareable link: ${shareableLink} (published at ${publishedAt})`);
+
+
+  // Create a new comment thread
+  const commentThread = await youtube.commentThreads.insert({
+    part: 'snippet',
+    requestBody: {
+      snippet: {
+        videoId: videoId, 
+        topLevelComment: {
+          snippet: {
+            textOriginal: 'This is a pinned comment.'
+          }
+        }
+      }
+    }
+  });
+
+  console.log(commentThread.data)
+
+  // // Pin the created comment thread
+  // const commentThreadId = commentThread.data.id;
+  // await youtube.commentThreads.update({
+  //   part: 'snippet',
+  //   requestBody: {
+  //     id: commentThreadId,
+  //     snippet: {
+  //       isPublic: true,
+  //       topLevelComment: {
+  //         snippet: {
+  //           isPublic: true,
+  //           textOriginal: 'This is a pinned comment.'
+  //         }
+  //       }
+  //     }
+  //   }
+  // });
+
+    // youtube.channels.list({
+    //   part: 'snippet,contentDetails,statistics',
+    //   mine: true,
+    //   auth: oAuth2Client
+    // }, (err, res) => {
+    //   if (err) {
+    //     console.error(err);
+    //   } else {
+    //     console.log(res.data);
+    //     var channels = res.data.items;
+    //     if (channels.length == 0) {
+    //       console.log('No channel found.');
+    //     } else {
+    //       console.log(`This channel's ID is ${channels[0].id}. Its title is ${channels[0].snippet.title}, and it has ${channels[0].statistics.viewCount} views.`);
+    //     }
+    //   }
+    // });
 
   // After acquiring an access_token, you may want to check on the audience, expiration,
   // or original scopes requested. You can do that with the `getTokenInfo` method.
@@ -696,9 +815,10 @@ async function uploadToYoutube() {
         access_type: 'offline',
         scope: [
           'https://www.googleapis.com/auth/youtube',
-          'https://www.googleapis.com/auth/youtube.upload'
+          'https://www.googleapis.com/auth/youtube.upload',
+          'https://www.googleapis.com/auth/youtube.force-ssl'
         ],
-        prompt: 'consent'
+        // prompt: 'consent'
       });
 
       // Open an HTTP server to accept the OAuth callback. In this simple example, the
@@ -890,7 +1010,7 @@ async function exportToCSV(data) {
     
     // await exportToCSV([data])
 
-    await uploadToYoutube()
+    await uploadToYoutube('Dinosaur Coding 3 Racing Games')
 
   } catch (err) {
     console.error('Error:', err);
