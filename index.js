@@ -634,9 +634,6 @@ async function uploadFileToDrive(appTitle) {
 // upload to youtube
 async function uploadToYoutube() {
 
-  // Download your OAuth2 configuration from Google
-  const keys = require('./credentials.json');
-
   const oAuth2Client = await getAuthenticatedClient();
   // Make a simple request to the People API using our pre-authenticated client. The `request()` method
   // takes a GaxiosOptions object. Visit https://github.com/JustinBeckwith/gaxios.
@@ -661,11 +658,7 @@ async function uploadToYoutube() {
         if (channels.length == 0) {
           console.log('No channel found.');
         } else {
-          console.log('This channel\'s ID is %s. Its title is \'%s\', and ' +
-                      'it has %s views.',
-                      channels[0].id,
-                      channels[0].snippet.title,
-                      channels[0].statistics.viewCount);
+          console.log(`This channel's ID is ${channels[0].id}. Its title is ${channels[0].snippet.title}, and it has ${channels[0].statistics.viewCount} views.`);
         }
       }
     });
@@ -682,6 +675,7 @@ async function uploadToYoutube() {
   * workflow. Return the full client to the callback.
   */
   async function getAuthenticatedClient() {
+    const keys = require('./credentials.json');
     const { OAuth2Client } = await import('google-auth-library');
     const http = await import('http');
     const url = await import('url');
@@ -715,7 +709,7 @@ async function uploadToYoutube() {
             // Acquire the code from the query string and close the web server.
             const qs = new url.URL(req.url, 'http://localhost:3000').searchParams;
             const code = qs.get('code');
-            console.log(`Code is ${code}`);
+            // console.log(`Code is ${code}`);
             res.end('Authentication successful! Please return to the console.');
             server.destroy();
 
