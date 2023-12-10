@@ -33,7 +33,7 @@
     "puppeteer-extra-plugin-session": "^1.0.1",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
     "server-destroy": "^1.0.1",
-    "sharp": "^0.31.3",
+    "sharp": "^0.32.6",
     "util": "^0.12.5"
   }
 }
